@@ -645,7 +645,7 @@ export class RoomManager {
   private onDebugCommand(socket: GameSocket, p: { cmd: DebugCommand }, ack: unknown): void {
     const c = this.debugAllowed(socket);
     if (!c) return reply(ack, fail('開發者工具未啟用。'));
-    const cmds: DebugCommand[] = ['skip_prep', 'end_shift', 'spawn_guest', 'spawn_monster', 'monster_off', 'restock', 'reinit_room', 'sleepy', 'sneeze_soon', 'monster_grab_me', 'guest_off', 'spill_here'];
+    const cmds: DebugCommand[] = ['skip_prep', 'end_shift', 'spawn_guest', 'spawn_monster', 'monster_off', 'restock', 'reinit_room', 'sleepy', 'sneeze_soon', 'monster_grab_me', 'guest_off', 'spill_here', 'monster_front'];
     if (!cmds.includes(p?.cmd)) return reply(ack, fail('未知的指令。'));
     const err = c.room.debugCommand(p.cmd, c.player.role ?? null);
     reply(ack, err ? fail(err) : { ok: true });

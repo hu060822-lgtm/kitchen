@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BASKET_SLOTS, CUT_LABEL, MIX_LABEL, INGREDIENTS, SEASONINGS, SEASONING_IDS, TASK_TEXT, isTwoHanded, type Held, TOKEN_COLOR, TOKEN_LABEL, ZONES, flawSpeedMultiplier, type KitchenPublic, type Seat, type SignalToken, type StationDef } from '@last-table/shared';
 import { currentTarget, currentZone, pose } from '../game/controller';
-import { mateTarget, monsterAimed, nearbyFloor, nearbyPuddle, preferMate, quickPlanFor, requestLock, storageIds, tossTarget } from '../game/loop';
+import { mateTarget, monsterAimed, rifleAimed, nearbyFloor, nearbyPuddle, preferMate, quickPlanFor, requestLock, storageIds, tossTarget } from '../game/loop';
 import { currentTab, tabLabel, useStorageTab } from '../game/storageTabs';
 import { keyLabel, useKeymap } from '../game/keymap';
 import { forceStart, readyUp } from '../net/socket';
@@ -58,9 +58,7 @@ function Aim({ role }: { role: Seat }): JSX.Element {
   const zone = ZONES.find((z) => pose.x >= z.minX && pose.x <= z.maxX && pose.z >= z.minZ && pose.z <= z.maxZ);
   return (
     <>
-      <div className={`crosshair ${t || showMate ? 'hot' : ''}`} aria-hidden>
-        <i />
-      </div>
+      <RifleCrosshair k={k} role={role} hot={!!(t || showMate)} />
       {status === 'hidden' && (
         <div className="prompt plate">
           <kbd>{keyLabel('interact')}</kbd>
@@ -102,6 +100,25 @@ function Aim({ role }: { role: Seat }): JSX.Element {
   );
 }
 
+/** 準星：平常是一個點；拿著來福槍時變成十字準心，對到怪物（會打中）時變紅 */
+function RifleCrosshair({ k, role, hot }: { k: KitchenPublic | null; role: Seat; hot: boolean }): JSX.Element {
+  const rifle = k?.players[role]?.held?.kind === 'rifle';
+  const locked = rifle ? rifleAimed() !== null : false;
+  return (
+    <div className={`crosshair ${hot && !rifle ? 'hot' : ''} ${rifle ? 'rifle' : ''} ${locked ? 'locked' : ''}`} aria-hidden>
+      <i />
+      {rifle && (
+        <>
+          <b className="ch-l" />
+          <b className="ch-r" />
+          <b className="ch-t" />
+          <b className="ch-b" />
+        </>
+      )}
+    </div>
+  );
+}
+
 /** 物理的提示：丟給準心對著的隊友、腳下的積水（擦乾） */
 function PhysicsPrompts({ k, role }: { k: KitchenPublic | null; role: Seat }): JSX.Element | null {
   const nameOf = useSeatName();
@@ -110,9 +127,21 @@ function PhysicsPrompts({ k, role }: { k: KitchenPublic | null; role: Seat }): J
   const toss = held?.kind === 'item' ? tossTarget() : null;
   const atMonster = held?.kind === 'item' && !toss ? monsterAimed() : null;
   const pud = nearbyFloor() ? null : nearbyPuddle();
-  if (!toss && !pud && atMonster === null) return null;
+  const rifle = held?.kind === 'rifle';
+  const aimed = rifle ? rifleAimed() : null;
+  const ammo = k.rifle?.ammo ?? 0;
+  if (!toss && !pud && atMonster === null && !rifle) return null;
   return (
     <div className="physics-prompts">
+      {rifle && (
+        <div className={`prompt plate ${aimed !== null ? 'wet' : ''}`}>
+          <kbd className="mouse">左鍵</kbd>
+          <span>
+            {ammo <= 0 ? '沒有子彈了：拿回槍架放好' : aimed !== null ? `開槍——已對準牠（${aimed.toFixed(1)} 公尺）` : k.threats.monster?.present ? '開槍：把準心對準牠（變紅才打得中）' : '開槍（牠不在裡面，別浪費子彈）'}
+            <span className="xs dim">　剩 {ammo} 發・對著槍架左鍵放回</span>
+          </span>
+        </div>
+      )}
       {atMonster !== null && (
         <div className="prompt plate wet">
           <kbd>{keyLabel('toss')}</kbd>
@@ -289,9 +318,9 @@ function Hotbar({ k, role }: { k: KitchenPublic; role: Seat }): JSX.Element {
         const id = basket[i];
         return <Slot key={i} label="菜籃" h={id ? { kind: 'item', id } : null} k={k} role={role} />;
       })}
-      {!one && !two && me?.held && me?.other && (
+      {!two && (!one || basket.length > 0) && (
         <span className="slot-hint xs">
-          <kbd>{keyLabel('swap')}</kbd> 換手
+          <kbd>{keyLabel('swap')}</kbd>／滾輪 {one ? '翻菜籃' : basket.length ? '換手・翻菜籃' : '換手'}
         </span>
       )}
     </div>
@@ -313,6 +342,7 @@ function shortHeld(h: NonNullable<Held>, k: KitchenPublic): string {
   }
   if (h.kind === 'measure') return `量匙・${SEASONINGS[h.seasoning].label}${h.extra ? `＋${SEASONINGS[h.extra.seasoning].label}` : ''}`;
   if (h.kind === 'crate') return h.storage === 'FRIDGE' ? '冷藏貨箱' : '乾貨箱';
+  if (h.kind === 'rifle') return `來福槍・${k.rifle?.ammo ?? 0} 發`;
   return `髒盤 ×${h.plate + h.bowl}`;
 }
 
@@ -622,7 +652,7 @@ function ThreatStatus(): JSX.Element | null {
     else if (m.stunLeft) lines.push({ key: 'm', text: `砸中了：牠愣住了（${Math.ceil(m.stunLeft / 1000)} 秒）——快跑`, tone: 'warn' });
     else {
       const flashOk = k.t >= (k.flashReadyAt ?? 0);
-      lines.push({ key: 'm', text: `後門的東西在追最近的人：再 ${left ?? 40} 秒離開${flashOk ? '（監視器按 3 緊急照明逼退牠；看著牠按 T 丟東西）' : '（看著牠按 T 丟東西砸牠）'}`, tone: (left ?? 40) <= 5 ? 'calm' : 'danger' });
+      lines.push({ key: 'm', text: `後門的東西在追最近的人：再 ${left ?? 40} 秒離開（${[flashOk ? '監視器按 3 緊急照明' : '', (k.rifle?.ammo ?? 0) > 0 ? `來福槍 ${k.rifle!.ammo} 發` : '', '看著牠按 T 丟東西'].filter(Boolean).join('；')}）`, tone: (left ?? 40) <= 5 ? 'calm' : 'danger' });
     }
   }
   if (!k.doors.fire) lines.push({ key: 'f', text: `防火門關著：${Math.max(0, Math.ceil((k.fireDoor.closedUntil - k.t) / 1000))} 秒`, tone: 'info' });

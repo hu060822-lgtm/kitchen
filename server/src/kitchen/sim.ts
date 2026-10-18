@@ -5,6 +5,11 @@ import {
   isTwoHanded,
   type HandSide,
   RACK_CAPACITY,
+  RIFLE,
+  rifleHits,
+  lineOfSight,
+  buildColliders,
+  forwardOf,
   CUT_LABEL,
   CUT_STROKES,
   DT,
@@ -198,6 +203,12 @@ interface PlayerRT {
   side: HandSide;
   /** 菜籃裡的生食材 */
   basket: string[];
+  /** B 的循環位置：0＝在第一隻手、1＝已換到另一隻手 */
+  cycle?: number;
+  /** 上一次檢查時目前的手有沒有東西（手「剛用掉」才自動補／換手；自己選了空手就不動） */
+  wasHeld?: boolean;
+  /** 正在用 B 翻菜籃：菜籃第 k 格拿到手上、原本手上的東西（prev）暫放在第 k 格 */
+  browse?: { k: number; prev: string | null; cur: string } | null;
   task: Task | null;
   status: 'ok' | 'trapped' | 'hidden';
   cache: Map<string, KitchenActionResult>;
@@ -224,11 +235,14 @@ const HAND_NEED: Record<string, readonly HeldKind[]> = {
   'plating:add': ['item'],
   '*:pour': ['measure'],
   'stove:ladle': ['plate'],
+  '*:plate_all': ['plate'],
   'pass:serve': ['plate'],
   'sink:load': ['dirty'],
   '*:restock': ['crate'],
   '*:store': ['item'],
 };
+/** 可以拿著盤子一次裝盤的工作站（湯鍋另外處理：連湯一起盛） */
+const PLATE_ALL_KINDS = new Set<string>(['pan', 'oven', 'toaster', 'rack', 'prep']);
 const cagePos = (): [number, number] => [STATION_BY_ID.cage.pos[0], STATION_BY_ID.cage.pos[1]];
 
 const CAPACITY: Partial<Record<StationDef['kind'], number>> = { sink: 2, prep: 1, pan: 3, stove: 8, toaster: 2, shelf: 4, oven: 4, mixer: 6 };
@@ -296,6 +310,11 @@ export class KitchenSim {
   backDoor = { closedUntil: 0 };
   /** 緊急照明（入侵後的反制）：下一次可以用的時間 */
   flashReadyAt = 0;
+  /** 來福槍：剩幾發、上一發的時間（槍在誰手上看玩家的 held；沒人拿就在槍架上） */
+  rifleAmmo: number = RIFLE.ammo;
+  rifleShotAt = -1e9;
+  /** 按了幾次 B（教學關判定用） */
+  slotCycles = 0;
   get backClosed(): boolean {
     return this.t < this.backDoor.closedUntil;
   }
@@ -604,7 +623,7 @@ export class KitchenSim {
   private quick(role: Seat, def: StationDef, s: StationRT, p: KitchenActionPayload, mode: QuickMode): KitchenActionResult {
     const pl = this.players[role];
     const open = this.orders.filter((o) => o.status === 'open');
-    const plan = planQuick(mode, def, s, { held: pl.held, other: pl.other, basket: pl.basket, status: pl.status }, open.length, { monsterIn: !!this.threats?.public(this).monster?.present });
+    const plan = planQuick(mode, def, s, { held: pl.held, other: pl.other, basket: pl.basket, status: pl.status }, open.length, { monsterIn: !!this.threats?.public(this).monster?.present, rifle: { ammo: this.rifleAmmo, holder: this.rifleHolder() } });
     if (plan.kind === 'none') return warn(`${plan.label}。`);
     if (plan.kind === 'panel') return info(`${plan.label}：按 E 打開${def.label}。`);
     let args = plan.args ?? {};
@@ -741,18 +760,86 @@ export class KitchenSim {
   }
 
   /**
-   * 手上空了：菜籃裡有原料就補到手上；菜籃空了、另一隻手有東西，就換成用另一隻手。
+   * 手上空了：另一隻手有東西就換成用另一隻手；兩隻手都空了，菜籃裡有原料就補到手上。
    * （所以「放下」之後永遠是拿著下一樣東西的那隻手在用，不用自己切換）
    */
   refillHands(): void {
     for (const r of this.seats) {
       const p = this.players[r];
-      while (!p.held && p.basket.length) {
-        const id = p.basket.shift()!;
-        if (this.items.has(id)) p.held = { kind: 'item', id };
+      // 翻菜籃中途手上的東西被用掉或換掉：結束翻找（原本手上的東西留在菜籃裡）
+      if (p.browse && !(p.held?.kind === 'item' && p.held.id === p.browse.cur)) p.browse = null;
+      if (!p.held && p.wasHeld) {
+        // 先換成另一隻拿著東西的手；兩隻手都空了才從菜籃補
+        if (p.other) this.swapHands(r);
+        while (!p.held && p.basket.length) {
+          const id = p.basket.shift()!;
+          if (this.items.has(id)) p.held = { kind: 'item', id };
+        }
       }
-      if (!p.held && p.other) this.swapHands(r);
+      p.wasHeld = !!p.held;
     }
+  }
+
+  /**
+   * B／滾輪：依序切換「這隻手 → 另一隻手 → 菜籃每一格（拿到目前的手上）→ 回到第一隻手」。空手也能切。
+   * 回傳說明文字；做不到回傳 null。
+   */
+  cycleSlot(role: Seat): string | null {
+    const p = this.players[role];
+    if (isTwoHanded(p.held)) return null;
+    this.slotCycles++;
+    const two = this.hasTwoHands(role);
+    const label = (): string => `${two ? HAND_LABEL[p.side] : '手上'}：${p.held ? this.describeHeld(p.held) : '空著'}`;
+    // 菜籃能不能翻：目前的手空著或拿著食材才能和菜籃交換
+    const canBrowse = (): boolean => !p.held || p.held.kind === 'item';
+    if (p.browse) {
+      // 把翻出來的放回第 k 格，換下一格
+      const b = p.browse;
+      const cur = b.cur;
+      if (b.prev) {
+        p.basket[b.k] = cur;
+        p.held = { kind: 'item', id: b.prev };
+      } else {
+        p.basket.splice(b.k, 0, cur);
+        p.held = null;
+      }
+      p.browse = null;
+      const k = b.k + 1;
+      if (k < p.basket.length) return this.browseTo(role, k) ?? label();
+      // 翻完了：換回另一隻手
+      if (two) this.swapHands(role);
+      p.wasHeld = !!p.held;
+      return label();
+    }
+    // 在手上：先換另一隻手（第一次按），換過來後再按就翻菜籃
+    const onSecond = p.cycle === 1;
+    if (two && !onSecond) {
+      this.swapHands(role);
+      p.cycle = 1;
+      p.wasHeld = !!p.held;
+      return label();
+    }
+    p.cycle = 0;
+    if (p.basket.length && canBrowse()) return this.browseTo(role, 0) ?? label();
+    if (two) this.swapHands(role);
+    p.wasHeld = !!p.held;
+    return label();
+  }
+
+  /** 把菜籃第 k 格拿到目前的手上（原本手上的東西暫放到第 k 格） */
+  private browseTo(role: Seat, k: number): string | null {
+    const p = this.players[role];
+    const id = p.basket[k];
+    if (!id) return null;
+    const prev = p.held?.kind === 'item' ? p.held.id : null;
+    if (p.held && !prev) return null;
+    if (prev) p.basket[k] = prev;
+    else p.basket.splice(k, 1);
+    p.held = { kind: 'item', id };
+    p.browse = { k, prev, cur: id };
+    p.wasHeld = true;
+    const it = this.items.get(id);
+    return `菜籃第 ${k + 1} 格：${it ? INGREDIENTS[it.type].label : '食材'}${prev ? '（手上的先放進菜籃）' : ''}`;
   }
 
   /** 單手廚師只有一隻手 */
@@ -939,13 +1026,12 @@ export class KitchenSim {
       return this.startTask(role, 'escort', 'guest');
     }
     if (p.stationId === 'self') {
+      if (p.action === 'fire') return this.fireRifle(role, args);
       if (p.action !== 'swap') return warn('沒有這個動作。');
-      if (!this.hasTwoHands(role)) return info('你只有一隻手。');
       if (isTwoHanded(pl.held)) return warn('你雙手拿著東西，不能換手。');
-      if (!pl.held && !pl.other) return info('兩隻手都是空的。');
-      if (!pl.held || !pl.other) return info('另一隻手是空的（放下手上的東西後，會自動改用拿著東西的那隻手）。');
-      this.swapHands(role);
-      return ok(`換成${HAND_LABEL[pl.side]}：${pl.held ? this.describeHeld(pl.held) : '空著'}。`);
+      if (!this.hasTwoHands(role) && !pl.basket.length) return info('你只有一隻手，菜籃也是空的。');
+      const msg = this.cycleSlot(role);
+      return msg ? ok(msg) : info('現在沒辦法換。');
     }
     const def = STATION_BY_ID[p.stationId];
     if (!def) return warn('找不到這個工作站。');
@@ -964,6 +1050,7 @@ export class KitchenSim {
       return gate;
     }
     this.flaws.onWork(role, def, p.action);
+    if (p.action === 'plate_all') return this.plateAll(role, s);
 
     switch (def.kind) {
       case 'fridge':
@@ -1004,6 +1091,8 @@ export class KitchenSim {
         return this.actOven(role, s, p.action, args);
       case 'mixer':
         return this.actMixer(role, s, p.action, args);
+      case 'gunrack':
+        return this.actGunrack(role, p.action);
     }
   }
 
@@ -1476,6 +1565,104 @@ export class KitchenSim {
     return warn('沒有這個動作。');
   }
 
+  /**
+   * 一次裝盤：拿著盤子（或碗）到平底鍋、烤箱、烤麵包機、成品架、砧板，裡面的東西全部裝進手上的盤子。
+   * 湯鍋等於「盛起來」（連湯一起）。液體不能直接裝盤，留在原處。
+   */
+  private plateAll(role: Seat, s: StationRT): KitchenActionResult {
+    const pl = this.players[role];
+    if (s.def.kind === 'stove') return this.actHeat(role, s, 'ladle', {});
+    if (!PLATE_ALL_KINDS.has(s.def.kind)) return warn('這裡不能直接裝盤。');
+    if (pl.held?.kind !== 'plate') return warn('先拿一個盤子（裝盤區按左鍵端起來）。');
+    const plate = this.plates.get(pl.held.id);
+    if (!plate) return warn('盤子不見了。');
+    const ids = s.items.filter((id) => {
+      const it = this.items.get(id);
+      return it && !INGREDIENTS[it.type].liquid;
+    });
+    if (!ids.length) return warn(`${s.def.label}裡沒有可以裝盤的東西。`);
+    const names: string[] = [];
+    for (const id of ids) {
+      const it = this.items.get(id)!;
+      this.log(it, 'plate', role, s.def.id);
+      plate.components.push(...this.snapshots(it));
+      names.push(INGREDIENTS[it.type].label);
+      this.items.delete(id);
+      s.items.splice(s.items.indexOf(id), 1);
+    }
+    return ok(`${names.join('、')}一次裝進${plate.vessel === 'bowl' ? '碗' : '盤子'}（${ids.length} 樣）。`);
+  }
+
+  /* ---------------------------- 來福槍 ---------------------------- */
+
+  /** 誰拿著來福槍（沒人拿＝在槍架上；拿著的人放下、被抓走、掉了，槍都會回到槍架） */
+  rifleHolder(): Seat | null {
+    for (const r of this.seats) {
+      const p = this.players[r];
+      if (p.held?.kind === 'rifle' || p.other?.kind === 'rifle') return r;
+    }
+    return null;
+  }
+
+  private actGunrack(role: Seat, action: string): KitchenActionResult {
+    const pl = this.players[role];
+    const pose = this.hooks.pose(role);
+    const at: [number, number] | undefined = pose ? [pose.x, pose.z] : undefined;
+    if (action === 'return') {
+      if (pl.held?.kind !== 'rifle') return warn('手上沒有槍。');
+      pl.held = null;
+      this.hooks.event({ kind: 'coop', sense: 'sound', sound: 'rifle_rack', at }, role);
+      return ok('來福槍放回槍架。');
+    }
+    if (action !== 'take') return warn('沒有這個動作。');
+    const holder = this.rifleHolder();
+    if (holder === role) return info('槍已經在你手上。');
+    if (holder) return warn('槍在隊友手上。');
+    if (this.rifleAmmo <= 0) return warn('子彈打完了，這把槍今晚沒用了。');
+    if (!this.bothHandsFree(role)) return warn('來福槍要用雙手拿：先把手上的東西放下。');
+    pl.held = { kind: 'rifle' };
+    this.hooks.event({ kind: 'coop', sense: 'sound', sound: 'rifle_rack', at }, role);
+    return ok(`拿起來福槍（剩 ${this.rifleAmmo} 發）。對準牠按左鍵開槍，打中一次就能把牠打退。`);
+  }
+
+  /**
+   * 開槍：子彈沿著你面對的方向直線飛出。怪物在射程內、離彈道夠近、中間沒有牆擋住＝打中，把牠打退。
+   * 朝向用用戶端送來的（準心當下的方向），但不能和伺服器記錄的差太多。
+   */
+  private fireRifle(role: Seat, args: Record<string, unknown>): KitchenActionResult {
+    const pl = this.players[role];
+    if (pl.held?.kind !== 'rifle') return warn('手上沒有槍（槍架在監視器旁邊）。');
+    if (pl.status !== 'ok') return warn('現在不行。');
+    if (this.physics.frozen(role)) return warn('你還沒爬起來。');
+    const pose = this.hooks.pose(role);
+    if (!pose) return warn('找不到你的位置。');
+    if (this.t - this.rifleShotAt < RIFLE.cooldownMs) return info('還在拉槍機。');
+    if (this.rifleAmmo <= 0) {
+      this.hooks.event({ kind: 'coop', sense: 'sound', sound: 'dry_fire', at: [pose.x, pose.z] }, role);
+      return warn('喀——沒有子彈了。把槍放回槍架吧。');
+    }
+    let yaw = pose.yaw;
+    const want = Number(args.yaw);
+    if (Number.isFinite(want)) {
+      const diff = Math.atan2(Math.sin(want - pose.yaw), Math.cos(want - pose.yaw));
+      if (Math.abs(diff) <= RIFLE.yawTolerance) yaw = want;
+    }
+    this.rifleAmmo--;
+    this.rifleShotAt = this.t;
+    this.hooks.event({ kind: 'coop', sound: 'gunshot', visual: 'muzzle', at: [pose.x, pose.z], role }, 'all');
+    this.noise(pose.x, pose.z, RIFLE.noise, `gunshot:${role}`);
+    const left = this.rifleAmmo;
+    const m = this.threats?.public(this).monster;
+    const [fx, fz] = forwardOf(yaw);
+    const hit = !!m?.present && rifleHits(pose.x, pose.z, fx, fz, m.x, m.z) && lineOfSight(pose.x, pose.z, m.x, m.z, buildColliders(this.doors), 1.0);
+    if (hit && this.threats?.repelMonster?.(this, 'rifle')) {
+      this.stats.rifleHits = (this.stats.rifleHits ?? 0) + 1;
+      return ok(`打中了！牠被打退了。（剩 ${left} 發）`);
+    }
+    if (!m?.present) return info(`砰！——沒有目標。（剩 ${left} 發）`);
+    return warn(`沒打中。（剩 ${left} 發）`);
+  }
+
   /* ---------------------------- 烤箱 ---------------------------- */
 
   private actOven(role: Seat, s: StationRT, action: string, args: Record<string, unknown>): KitchenActionResult {
@@ -1719,6 +1906,7 @@ export class KitchenSim {
     if (!h) return warn('手上沒有東西。');
     if (h.kind === 'crate') return warn('貨不能丟。');
     if (h.kind === 'dirty') return warn('髒盤要拿去水槽洗，不能丟。');
+    if (h.kind === 'rifle') return warn('槍不能丟：放回槍架。');
     if (h.kind === 'item') this.items.delete(h.id);
     if (h.kind === 'plate') {
       const plate = this.plates.get(h.id);
@@ -1952,12 +2140,14 @@ export class KitchenSim {
 
   /* ============================== 恐怖系統的介面 ============================== */
 
-  /** 怪物抓住玩家：關進冷藏室的鐵籠（手上的東西保留），等隊友救 */
+  /** 怪物抓住玩家：關進冷藏室的鐵籠（手上的東西保留，來福槍除外），等隊友救 */
   trap(role: Seat): void {
     const pl = this.players[role];
     if (pl.status === 'trapped') return;
     pl.status = 'trapped';
     pl.task = null;
+    // 被抓走時槍掉了：回到槍架上（隊友還能用）
+    if (pl.held?.kind === 'rifle') pl.held = null;
     if (this.cctvBy === role) this.cctvBy = null;
     this.stats.trapped++;
     const cage = this.stations.get('cage')!;
@@ -2082,6 +2272,7 @@ export class KitchenSim {
       fireDoor: { ...this.fireDoor },
       backDoor: { ...this.backDoor },
       flashReadyAt: this.flashReadyAt,
+      rifle: { ammo: this.rifleAmmo, holder: this.rifleHolder(), lastShotAt: this.rifleShotAt },
       threats: this.threats?.public(this) ?? { guest: null, monster: null, cctv: !!this.cctvBy },
       stats: { ...this.stats },
       coop: this.flaws.public(),
@@ -2137,6 +2328,7 @@ export class KitchenSim {
     if (h.kind === 'plate') return this.plates.get(h.id)?.vessel === 'bowl' ? '一碗菜' : '一盤菜';
     if (h.kind === 'measure') return `${SEASONINGS[h.seasoning].label} ${h.units}${h.extra ? `＋${SEASONINGS[h.extra.seasoning].label} ${h.extra.units}` : ''}`;
     if (h.kind === 'dirty') return `${h.plate + h.bowl} 個髒盤`;
+    if (h.kind === 'rifle') return `來福槍（${this.rifleAmmo} 發）`;
     return h.storage === 'FRIDGE' ? '一箱冷藏貨' : '一箱乾貨';
   }
 

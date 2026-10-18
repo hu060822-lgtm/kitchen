@@ -20,8 +20,8 @@ export interface EchoDisplay {
  * 畫面效果（只有看得見的角色會收到）：shift＝被拖走／救出來的瞬間、charge／lunge＝怪物衝過來、
  * flicker＝燈閃了一下、guest＝客人出現（畫面上沒有特效，只是記錄）
  */
-export type FxVisual = 'shift' | 'charge' | 'lunge' | 'flicker' | 'guest' | 'flash' | 'shake';
-type Events = { echo: EchoDisplay; riskTripped: { id: string; jamMs: number }; bump: void; near: void; fault: void; fx: { visual: FxVisual; at?: readonly [number, number] }; abduct: void };
+export type FxVisual = 'shift' | 'charge' | 'lunge' | 'flicker' | 'guest' | 'flash' | 'shake' | 'muzzle' | 'hit';
+type Events = { echo: EchoDisplay; riskTripped: { id: string; jamMs: number }; bump: void; near: void; fault: void; fx: { visual: FxVisual; at?: readonly [number, number] }; abduct: void; recoil: object };
 type Handler<K extends keyof Events> = (p: Events[K]) => void;
 
 const handlers = new Map<keyof Events, Set<(p: never) => void>>();

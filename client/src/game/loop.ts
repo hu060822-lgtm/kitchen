@@ -1,7 +1,7 @@
 import { handsFull } from '../ui/kitchenText';
 import { nextTab, tabIds } from './storageTabs';
 import { actionOf, isAction } from './keymap';
-import { CARRY_MAX, INGREDIENTS, INGREDIENT_IDS, SEASONING_IDS, RESTAURANT_ACOUSTICS, SEATS, STATIONS, ZONES, flawBodyScale, flawSpeedMultiplier, forwardOf, planQuick, PHYSICS, type Body, type IngredientId, type KitchenPublic, type QuickMode, type QuickPlan, type Seat, type StationDef, type StationKind } from '@last-table/shared';
+import { CARRY_MAX, INGREDIENTS, INGREDIENT_IDS, SEASONING_IDS, RESTAURANT_ACOUSTICS, SEATS, STATIONS, ZONES, flawBodyScale, flawSpeedMultiplier, forwardOf, planQuick, PHYSICS, RIFLE, rifleHits, lineOfSight, buildColliders, type Body, type IngredientId, type KitchenPublic, type QuickMode, type QuickPlan, type Seat, type StationDef, type StationKind } from '@last-table/shared';
 import { audio, type LoopSpec } from '../audio/engine';
 import { speak } from '../audio/speech';
 import { act, coop, emitMark, sendMove, sendStance } from '../net/socket';
@@ -242,6 +242,33 @@ export function monsterAimed(): number | null {
   return (vx * fx + vz * fz) / d >= 0.94 ? d : null;
 }
 
+/** 手上拿著來福槍 */
+export function holdingRifle(): boolean {
+  const r = role();
+  return !!r && useStore.getState().kitchen?.players[r]?.held?.kind === 'rifle';
+}
+
+/** 來福槍的準心對到怪物了（射程內、離彈道夠近、中間沒有牆）：回傳距離（伺服器用同一個判斷） */
+export function rifleAimed(): number | null {
+  const k = useStore.getState().kitchen;
+  const m = k?.threats.monster;
+  if (!k || !m?.present) return null;
+  const [fx, fz] = forwardOf(pose.yaw);
+  if (!rifleHits(pose.x, pose.z, fx, fz, m.x, m.z)) return null;
+  if (!lineOfSight(pose.x, pose.z, m.x, m.z, buildColliders(k.doors), 1.0)) return null;
+  return Math.hypot(m.x - pose.x, m.z - pose.z);
+}
+
+let lastShot = 0;
+/** 開槍（左鍵）：送出當下準心的方向，伺服器判定有沒有打中 */
+function fireRifle(): void {
+  const now = performance.now();
+  if (now - lastShot < RIFLE.cooldownMs) return;
+  lastShot = now;
+  emit('recoil', {});
+  void act('self', 'fire', { yaw: pose.yaw });
+}
+
 /** V：缺陷卡的技能（大嗓門召集、定時噴嚏送出氣味警告、嗜睡學徒的雙爐面板） */
 function pressV(): void {
   const st = useStore.getState();
@@ -360,7 +387,7 @@ export function quickPlanFor(mode: QuickMode, r: Seat, def: StationDef): QuickPl
   const me = k?.players[r];
   const s = k?.stations[def.id];
   if (!k || !me || !s) return null;
-  return planQuick(mode, def, s, me, k.orders.filter((o) => o.status === 'open').length, { monsterIn: !!k.threats.monster?.present });
+  return planQuick(mode, def, s, me, k.orders.filter((o) => o.status === 'open').length, { monsterIn: !!k.threats.monster?.present, rifle: k.rifle });
 }
 
 /** 滑鼠點擊（鎖定滑鼠、沒有面板時）：左鍵＝拿／放，右鍵＝使用；要選擇的事才打開面板 */
@@ -375,6 +402,11 @@ function clickStation(mode: QuickMode): void {
     return;
   }
   const t = currentTarget(r, guestAt(k));
+  // 拿著來福槍：左鍵開槍（對著槍架時是放回去）
+  if (mode === 'primary' && k.players[r]?.held?.kind === 'rifle' && t?.station?.kind !== 'gunrack') {
+    fireRifle();
+    return;
+  }
   const mate = mateTarget();
   if (mate && preferMate(t, mate)) {
     openMate(mate.seat);
@@ -399,11 +431,11 @@ function clickStation(mode: QuickMode): void {
   void act(def.id, 'quick', { mode });
 }
 
-/** 換手（伺服器判定：兩隻手都拿著東西才有意義；拿著要用雙手的東西不能換） */
+/** 換手／翻菜籃（伺服器判定）：這隻手 → 另一隻手 → 菜籃每一格 → 回來。空手也能切；拿著要用雙手的東西不能換 */
 export function swapHands(): void {
   const r = role();
   if (!r) return;
-  void act('self', 'swap', {}, { quiet: true });
+  void act('self', 'swap', {});
   audio.uiKey();
 }
 

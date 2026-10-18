@@ -1211,7 +1211,49 @@ const BODY: Partial<Record<StationDef['kind'], (c: Ctx) => JSX.Element>> = {
   rack: Rack,
   oven: Oven,
   mixer: Mixer,
+  gunrack: GunRack,
 };
+
+/** 拿著盤子（或碗）站在平底鍋、烤箱、烤麵包機、成品架、砧板前：裡面的東西一次全部裝盤 */
+const PLATE_ALL = new Set(['pan', 'oven', 'toaster', 'rack', 'prep']);
+function PlateAll({ def, s, k, role, run }: Ctx): JSX.Element | null {
+  const me = k.players[role];
+  const plate = me?.held?.kind === 'plate' ? me.held : me?.other?.kind === 'plate' ? me.other : null;
+  if (!plate || !PLATE_ALL.has(def.kind)) return null;
+  const n = s.items.filter((id) => k.items[id] && !INGREDIENTS[k.items[id].type].liquid).length;
+  if (!n) return null;
+  const v = k.plates[plate.id]?.vessel === 'bowl' ? '碗' : '盤子';
+  return (
+    <div className="actions">
+      <Btn kind="primary" label={`${def.label}裡的 ${n} 樣全部裝進手上的${v}`} onClick={() => run('plate_all')}>
+        全部裝進{v}（{n} 樣）
+      </Btn>
+    </div>
+  );
+}
+
+/** 來福槍架：一把槍、整班 4 發；打中怪物一次就把牠打退 */
+function GunRack({ k, role, run }: Ctx): JSX.Element {
+  const rifle = k.rifle ?? { ammo: 4, holder: null, lastShotAt: 0 };
+  const mine = k.players[role]?.held?.kind === 'rifle';
+  const nameOf = useSeatName();
+  return (
+    <>
+      <p className="legend">牠進到裡面時，拿起來福槍、把準心對準牠（十字準心變紅）按滑鼠左鍵開槍。打中一次就能把牠打退回後門。整班只有 4 發，槍聲很大（牠以外的東西也會聽到）。</p>
+      <Say text={`剩 ${rifle.ammo} 發子彈。${rifle.holder ? (mine ? '槍在你手上。' : `槍在${nameOf(rifle.holder as Seat)}手上。`) : '槍掛在架上。'}`} />
+      <div className="actions">
+        {mine ? (
+          <Btn kind="primary" label="把來福槍放回槍架" onClick={() => run('return')}>放回槍架</Btn>
+        ) : (
+          <Btn kind="primary" label="拿起來福槍（雙手）" disabled={!!rifle.holder || rifle.ammo <= 0 || !bothFree(k, role)} onClick={() => run('take')}>
+            拿起來福槍（雙手）
+          </Btn>
+        )}
+      </div>
+      {!mine && !rifle.holder && !bothFree(k, role) && <p className="legend warn-text">要空出雙手才能拿槍。</p>}
+    </>
+  );
+}
 
 function TaskBar({ k, role }: { k: KitchenPublic; role: Seat }): JSX.Element | null {
   const task = k.players[role]?.task;
@@ -1291,6 +1333,7 @@ export default function StationPanel(): JSX.Element | null {
         <div className="body" ref={bodyRef}>
           <TaskBar k={k} role={role} />
           {Body && <Body def={def} s={s} k={k} role={role} run={run} />}
+          <PlateAll def={def} s={s} k={k} role={role} run={run} />
           <Notes stationId={def.id} k={k} />
           {res && (
             <div className={`result ${res.tone}`} key={res.id} role="status">

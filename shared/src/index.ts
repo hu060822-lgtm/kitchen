@@ -17,3 +17,4 @@ export * from './nights';
 export * from './kitchen/quick';
 export * from './endless';
 export * from './physics';
+export * from './rifle';

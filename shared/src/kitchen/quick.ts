@@ -43,15 +43,24 @@ const act = (action: string, label: string, args?: Record<string, unknown>, firs
 const panel = (label: string): QuickPlan => ({ kind: 'panel', label });
 const none = (label: string): QuickPlan => ({ kind: 'none', label });
 
-export function planQuick(mode: QuickMode, def: StationDef, s: QuickStation, me: QuickMe, openOrders: number, ctx: { monsterIn?: boolean } = {}): QuickPlan {
+export function planQuick(mode: QuickMode, def: StationDef, s: QuickStation, me: QuickMe, openOrders: number, ctx: { monsterIn?: boolean; rifle?: { ammo: number; holder: string | null } } = {}): QuickPlan {
   const h = me.held;
   const item = h?.kind === 'item' || me.other?.kind === 'item' || me.basket.length > 0;
   const plate = h?.kind === 'plate' || me.other?.kind === 'plate';
+  /** 目前的手拿著盤子：到煮好的東西前面按左鍵＝一次裝盤 */
+  const handPlate = h?.kind === 'plate';
   const has = s.items.length > 0;
   const k = def.kind;
 
   if (k === 'locker') return me.status === 'hidden' ? act('leave', '出來') : act('hide', '躲進去');
   if (k === 'cage') return act('rescue', '撬開鐵籠');
+  if (k === 'gunrack') {
+    if (h?.kind === 'rifle') return act('return', '放回來福槍');
+    if (ctx.rifle && ctx.rifle.holder) return none('槍在隊友手上');
+    if (ctx.rifle && ctx.rifle.ammo <= 0) return none('子彈打完了');
+    if (h || me.other) return none('要空出雙手才能拿槍');
+    return act('take', ctx.rifle ? `拿起來福槍（${ctx.rifle.ammo} 發）` : '拿起來福槍');
+  }
 
   if (mode === 'use') {
     switch (k) {
@@ -105,10 +114,12 @@ export function planQuick(mode: QuickMode, def: StationDef, s: QuickStation, me:
     case 'toaster':
     case 'oven':
     case 'mixer':
+      if (k !== 'mixer' && has && (handPlate || (plate && !item))) return act('plate_all', `全部裝盤（${s.items.length} 樣）`);
       if (item) return act('place', '放上去');
       if (has) return act('pick', '拿起來');
       return none('這裡是空的');
     case 'stove':
+      if (handPlate && (has || (s.liquid ?? 0) > 0)) return act('ladle', '盛起來');
       if (item) return act('place', '下鍋');
       if (plate && (has || (s.liquid ?? 0) > 0)) return act('ladle', '盛起來');
       return none(plate ? '鍋裡是空的' : '要用碗盛（右鍵開火）');
@@ -117,10 +128,12 @@ export function planQuick(mode: QuickMode, def: StationDef, s: QuickStation, me:
       if (has || s.plates.length) return act('pick', '拿起來');
       return none('交接架是空的');
     case 'rack':
+      if (has && (handPlate || (plate && !item))) return act('plate_all', `全部裝盤（${s.items.length} 樣）`);
       if (item) return act('place', '放上成品架');
       if (has) return act('pick', '拿起來');
       return none('成品架是空的');
     case 'plating':
+      if (handPlate) return act('place', '放下盤子');
       if (item) return s.plates.length ? act('add', '裝盤', { plateId: s.plates[0] }) : act('add', '拿盤子並裝盤', undefined, { action: 'new_plate', args: { vessel: 'plate' } });
       if (plate) return act('place', '放下盤子');
       if (s.plates.length) return act('pick', '端起盤子', { plateId: s.plates[0] });

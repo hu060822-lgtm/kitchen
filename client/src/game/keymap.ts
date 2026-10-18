@@ -48,7 +48,7 @@ export const KEY_ACTIONS: readonly KeyActionDef[] = [
   { id: 'crouch', label: '蹲下／站起', group: '移動', def: ['KeyC'] },
   { id: 'brake', label: '煞車（暴衝快遞）', group: '移動', def: ['Space'] },
   { id: 'interact', label: '打開工作站／隊友面板・掙脫鐵籠', group: '動作', def: ['KeyE'] },
-  { id: 'swap', label: '換手（兩隻手都拿著東西時）', group: '動作', def: ['KeyB'] },
+  { id: 'swap', label: '切換左手／右手／菜籃', group: '動作', def: ['KeyB'] },
   { id: 'handoff', label: '接住（交接、快掉的東西）', group: '動作', def: ['KeyF'] },
   { id: 'pickup', label: '撿起地上的東西・擦乾積水・穩住', group: '動作', def: ['KeyX'] },
   { id: 'toss', label: '把手上的食材丟給隊友（或丟到前面的地上）', group: '動作', def: ['KeyT'] },

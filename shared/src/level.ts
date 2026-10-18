@@ -211,7 +211,9 @@ export type StationKind =
   /** 烤箱：三段溫度、預熱慢、兩面同時上色（不用翻面，可以放著去做別的事） */
   | 'oven'
   /** 攪拌碗：把幾份食材拌成一份（麵糊、肉餡、拌料） */
-  | 'mixer';
+  | 'mixer'
+  /** 來福槍架：一把槍、整班 4 發，打中怪物一次就能把牠打退 */
+  | 'gunrack';
 
 export interface StationDef {
   id: string;
@@ -268,6 +270,7 @@ export const STATIONS: readonly StationDef[] = [
   st('rack_meat', 'rack', '成品架・肉類', 'KITCHEN', [-2.4, 15], F_PZ),
   st('oven', 'oven', '烤箱', 'KITCHEN', [8.6, 14.1], F_MX),
   st('mixer', 'mixer', '攪拌碗', 'KITCHEN', [1.2, 13.4], F_MZ),
+  st('gunrack', 'gunrack', '來福槍架', 'KITCHEN', [8.6, 10.3], F_MX),
 ];
 export const STATION_BY_ID: Readonly<Record<string, StationDef>> = Object.fromEntries(STATIONS.map((s) => [s.id, s]));
 

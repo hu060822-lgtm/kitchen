@@ -77,6 +77,7 @@ export function heldText(h: Held | undefined, k: KitchenPublic | null, role: Sea
   if (h.kind === 'measure') return `量匙：${SEASONINGS[h.seasoning].label} ${h.units}${h.extra ? `＋${SEASONINGS[h.extra.seasoning].label} ${h.extra.units}` : ''}`;
   if (h.kind === 'crate') return `一箱${h.storage === 'FRIDGE' ? '冷藏' : '乾貨'}`;
   if (h.kind === 'dirty') return `${h.plate + h.bowl} 個髒盤${h.tray ? '（托盤）' : ''}`;
+  if (h.kind === 'rifle') return `來福槍（剩 ${k?.rifle?.ammo ?? 0} 發）`;
   if (h.kind === 'plate') {
     const p = k?.plates[h.id];
     return p ? plateLine(p) : '盤子';

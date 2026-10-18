@@ -695,6 +695,23 @@ class AudioEngine {
         this.noise(0.08, { freq: 1200, q: 0.8, gain: 0.15, pos });
         this.noise(0.35, { freq: 2600, q: 0.6, gain: 0.32, at: 0.12, type: 'highpass', pos });
         return;
+      case 'gunshot':
+        // 來福槍：爆裂的槍響＋低沉的回音＋退殼
+        this.noise(0.09, { freq: 2200, q: 0.4, gain: 0.9, pos });
+        this.noise(0.6, { freq: 380, q: 0.7, gain: 0.55, at: 0.01, pos });
+        this.tone(62, 0.5, { type: 'sine', gain: 0.6, slideTo: 38, pos });
+        this.noise(0.9, { freq: 900, q: 0.5, gain: 0.12, at: 0.18, attack: 0.05, pos });
+        this.tone(2400, 0.08, { type: 'triangle', gain: 0.05, at: 0.45, pos });
+        return;
+      case 'dry_fire':
+        // 沒子彈：喀一聲
+        this.noise(0.03, { freq: 3800, q: 4, gain: 0.25, pos });
+        return;
+      case 'rifle_rack':
+        // 拿起／放回來福槍：金屬與木頭碰撞
+        this.noise(0.06, { freq: 2600, q: 5, gain: 0.18, pos });
+        this.noise(0.1, { freq: 500, q: 1.5, gain: 0.2, at: 0.08, pos });
+        return;
       case 'rally':
         this.tone(310, 0.5, { type: 'sawtooth', gain: 0.18, filter: 1400, attack: 0.03, pos });
         this.tone(420, 0.45, { type: 'sawtooth', gain: 0.12, filter: 1600, at: 0.12, pos });

@@ -634,7 +634,7 @@ export function mergeFlawConfig(base: FlawEffectConfig, override: unknown): Flaw
  * 移動速度倍率。伺服器用它放寬移動預算，客戶端用同一個函式決定實際的步行速度，
  * 所以兩邊永遠一致（客戶端用的設定來自伺服器）。
  */
-export type HeldKind = 'item' | 'plate' | 'measure' | 'crate' | 'dirty' | null;
+export type HeldKind = 'item' | 'plate' | 'measure' | 'crate' | 'dirty' | 'rifle' | null;
 
 export function flawSpeedMultiplier(flaw: FlawId | null, zone: ZoneId | null, held: HeldKind | boolean, cfg: FlawEffectConfig): number {
   const heldKind: HeldKind = held === true ? 'plate' : held === false ? null : held;

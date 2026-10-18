@@ -978,6 +978,14 @@ export class Room {
         sim.physics.spill(p.pose.x - Math.sin(p.pose.yaw) * 1.5, p.pose.z - Math.cos(p.pose.yaw) * 1.5, 0.55, 'water');
         break;
       }
+      case 'monster_front': {
+        // 開發者工具：怪物站在自己面前 5 公尺、不會動（測試來福槍的瞄準與截圖）
+        if (!sim.threats || !by) return '這個房間沒有開啟恐怖系統。';
+        const p = [...this.players.values()].find((q) => q.role === by);
+        if (!p) return '找不到玩家。';
+        (sim.threats as unknown as { placeTest(x: number, z: number, t: number): void }).placeTest(p.pose.x - Math.sin(p.pose.yaw) * 5, p.pose.z - Math.cos(p.pose.yaw) * 5, sim.t);
+        break;
+      }
       case 'spawn_guest':
       case 'guest_off':
       case 'spawn_monster':

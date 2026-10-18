@@ -2,7 +2,7 @@ import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { FullSync, TutorialStepId } from '@last-table/shared';
+import { TUTORIAL_STEP_BY_ID, type FullSync, type TutorialStepId } from '@last-table/shared';
 import { Tutorial } from '../src/kitchen/tutorial';
 import type { ThreatDirector } from '../src/kitchen/threats';
 import { startHost, type HostHandle } from '../src/host';
@@ -61,28 +61,42 @@ describe('教學關：一整輪', () => {
     expect(step(b)).toBe('pantry');
     go('pantry', 'take', { type: 'bread' });
     expect(step(b)).toBe('toaster');
-    go('toaster', 'place');
-    go('toaster', 'start', { level: 3 });
+    go('toaster', 'quick', { mode: 'primary' });
+    go('toaster', 'quick', { mode: 'use' });
     expect(step(b)).toBe('fridge');
-    go('fridge', 'take', { type: 'egg' });
+    // 兩顆蛋、一份奶油：兩隻手放不下，奶油進菜籃
+    go('fridge', 'take', { type: 'egg', count: 2 });
+    expect(step(b)).toBe('fridge');
+    go('fridge', 'take', { type: 'butter' });
+    expect(b.sim.players.P1.basket.length).toBe(1);
+    expect(step(b)).toBe('hands');
+    // 按兩次 B
+    for (let i = 0; i < 2; i++) b.sim.handle('P1', { stationId: 'self', action: 'swap', args: {}, requestId: `sw${i}` });
+    b.run(0.2);
     expect(step(b)).toBe('pan');
-    go('pan_a', 'heat', { level: 'MED' });
-    go('pan_a', 'place');
+    // 翻回原本的手（翻完一圈）
+    for (let i = 0; i < 2; i++) b.sim.handle('P1', { stationId: 'self', action: 'swap', args: {}, requestId: `sw-back${i}` });
+    go('pan_a', 'quick', { mode: 'use' });
+    // 左鍵兩下：兩顆蛋都下鍋（放下之後自動換到另一隻拿著蛋的手）
+    go('pan_a', 'quick', { mode: 'primary' });
+    go('pan_a', 'quick', { mode: 'primary' });
+    expect(b.sim.stations.get('pan_a')!.items.map((id) => b.sim.items.get(id)!.type)).toEqual(['egg', 'egg']);
     expect(step(b)).toBe('cooked');
     b.run(23);
     for (let i = 0; i < 100 && b.sim.publicState().stations.toaster.toast; i++) b.run(0.5);
-    expect(step(b)).toBe('plate');
+    expect(step(b)).toBe('butter');
     go('pan_a', 'heat', { level: 'OFF' });
-    go('plating', 'new_plate', { vessel: 'plate' });
-    const plateId = b.sim.publicState().stations.plating.plates.at(-1)!;
-    go('pan_a', 'pick');
-    go('plating', 'add', { plateId });
-    expect(step(b)).toBe('plate');
-    go('toaster', 'pick');
-    go('plating', 'add', { plateId });
+    // 裝盤區左鍵：自動拿盤子、把手上的奶油裝上去
+    go('plating', 'quick', { mode: 'primary' });
+    expect(step(b)).toBe('plate_all');
+    // 空手左鍵端起盤子，到平底鍋、烤麵包機各按一下左鍵
+    go('plating', 'quick', { mode: 'primary' });
+    expect(b.sim.players.P1.held?.kind).toBe('plate');
+    go('pan_a', 'quick', { mode: 'primary' });
+    go('toaster', 'quick', { mode: 'primary' });
     expect(step(b)).toBe('season');
-    go('fridge', 'take', { type: 'butter' });
-    go('plating', 'add', { plateId });
+    go('plating', 'quick', { mode: 'primary' });
+    const plateId = b.sim.publicState().stations.plating.plates.at(-1)!;
     go('spice', 'measure', { seasoning: 'salt', units: 0.5 });
     go('plating', 'pour', { plateId });
     expect(step(b)).toBe('season');
@@ -94,6 +108,16 @@ describe('教學關：一整輪', () => {
     expect(r.ok).toBe(true);
     b.run(0.2);
     expect(b.sim.publicState().tutorial!.score).toBe(r.result!.total);
+    expect(step(b)).toBe('puddle');
+
+    // 地上的水：擦乾
+    const pud = b.sim.publicState().tutorial!.puddle!;
+    expect(pud).toBeTruthy();
+    Object.assign(b.poses.P1, { x: pud[0] + 0.5, z: pud[1], speed: 0 });
+    expect(b.coop('P1', 'mop').ok).toBe(true);
+    b.run(3);
+    expect(step(b)).toBe('crew');
+    expect(ack(b, 'crew').ok).toBe(true);
     expect(step(b)).toBe('guest_look');
 
     // 那位客人：坐在靠門的位子；站在餐廳看著他 1.5 秒
@@ -107,7 +131,13 @@ describe('教學關：一整輪', () => {
     const e = b.sim.handle('P1', { stationId: 'guest', action: 'escort', args: {}, requestId: 'esc' });
     expect(e.ok).toBe(true);
     b.run(2.5);
+    expect(step(b)).toBe('backdoor');
+    // 鎖後門
+    go('cctv', 'quick', { mode: 'use' });
+    expect(step(b)).toBe('rifle');
+    go('gunrack', 'quick', { mode: 'primary' });
     expect(step(b)).toBe('monster');
+    expect(th.monster.tune.speed).toBeLessThan(1);
 
     // 後門的東西：站在餐廳（牠不會進餐廳），等牠進來又離開
     Object.assign(b.poses.P1, { x: -6, z: 4, yaw: 0 });
@@ -123,6 +153,31 @@ describe('教學關：一整輪', () => {
     b.run(60);
     expect(th.monster.present).toBe(false);
     expect(th.guest.state).toBe('seated');
+    expect(th.monster.tune.speed).toBe(1);
+  });
+
+  it('後門的東西進來時，用來福槍打中牠：牠離開後這一步就過', () => {
+    const b = tutorialBench();
+    b.tut.idx = TUTORIAL_STEP_BY_ID.rifle.index;
+    b.act('P1', 'gunrack', 'take');
+    b.run(0.2);
+    expect(step(b)).toBe('monster');
+    const th = b.sim.threats as unknown as ThreatDirector;
+    // 先站在餐廳等牠走進廚房
+    Object.assign(b.poses.P1, { x: -6, z: 4, yaw: 0 });
+    for (let i = 0; i < 900 && !(th.monster.present && th.monster.z < 18.5); i++) b.run(0.1);
+    expect(th.monster.present).toBe(true);
+    th.monster.tune.speed = 0;
+    // 站到牠旁邊 4 公尺、面向牠
+    const m = th.monster;
+    Object.assign(b.poses.P1, { x: m.x - 4, z: m.z, yaw: -Math.PI / 2 });
+    const r = b.sim.handle('P1', { stationId: 'self', action: 'fire', args: { yaw: -Math.PI / 2 }, requestId: 'shot' });
+    expect(r.message).toContain('打中');
+    th.monster.tune.speed = 1;
+    for (let i = 0; i < 600 && step(b) === 'monster'; i++) b.run(0.1);
+    expect(step(b)).toBe('done');
+    // 教學用掉的子彈會補回來
+    expect(b.sim.rifleAmmo).toBe(4);
   });
 
   it('順序不同也會過：先煎好蛋、烤好吐司，再回頭確認看單和食譜，做過的步驟一起過', () => {
@@ -135,12 +190,16 @@ describe('教學關：一整輪', () => {
     // 一口氣做完整盤（還沒出餐）
     cookEggToast(b, 'P1');
     b.run(0.2);
+    // 換手要自己試過（按兩次 B）
+    expect(step(b)).toBe('hands');
+    for (let i = 0; i < 2; i++) b.sim.handle('P1', { stationId: 'self', action: 'swap', args: {}, requestId: `o${i}` });
+    b.run(0.2);
     expect(step(b)).toBe('serve');
   });
 
   it('後門的東西一直沒出現或玩家一直躲著：150 秒後也會結束這一步；被關在鐵籠裡時要先出來', () => {
     const b = tutorialBench();
-    b.tut.idx = 14;
+    b.tut.idx = TUTORIAL_STEP_BY_ID.monster.index;
     expect(b.tut.step).toBe('monster');
     const th = b.sim.threats as unknown as ThreatDirector;
     th.monster.banish(); // 模擬牠沒有出現

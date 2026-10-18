@@ -63,7 +63,7 @@ export default function Title(): JSX.Element {
   items.push({
     id: 'tutorial',
     label: '教學',
-    note: tutorialDone() ? '再走一次「第一班」' : '第一次玩？5 分鐘學會基本操作',
+    note: tutorialDone() ? '再跟老周走一次「第一班」' : '第一次玩？夜班主廚老周帶你走一遍（約 8 分鐘）',
     run: () => {
       setBusy('正在準備教學…');
       void startTutorial(savedName() || '見習廚師').then((e) => setBusy(e));

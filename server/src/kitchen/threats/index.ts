@@ -58,8 +58,8 @@ export class ThreatDirector implements ThreatSystem {
     return this.monster.stun(x, z, w);
   }
 
-  repelMonster(w: ThreatWorld): boolean {
-    return this.monster.repel(w);
+  repelMonster(w: ThreatWorld, cause: 'flash' | 'rifle' = 'flash'): boolean {
+    return this.monster.repel(w, cause);
   }
 
   disableMonster(): void {
@@ -73,6 +73,12 @@ export class ThreatDirector implements ThreatSystem {
   /** 開發者工具：怪物出現在某人面前並撲上來 */
   grabTest(role: Seat, x: number, z: number, yaw: number, t: number): void {
     this.monster.grabTest(role, x, z, yaw, t);
+  }
+
+  /** 開發者工具：怪物放在 (x,z)、在裡面、不會動 */
+  placeTest(x: number, z: number, t: number): void {
+    Object.assign(this.monster, { enabled: true, mode: 'patrol', x, z, yaw: 0, path: [], modeSince: t, kitchenLeft: 40_000 });
+    this.monster.tune.speed = 0;
   }
 
   command(cmd: 'spawn_guest' | 'guest_off' | 'spawn_monster' | 'monster_off', t: number): void {

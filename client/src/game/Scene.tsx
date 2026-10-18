@@ -1,6 +1,8 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { RAW_COLOR } from './itemColors';
 import { BROWN, ItemMesh, ShelfFood } from './food/FoodMesh';
+import { GunRack, MuzzleFlashes, ViewRifle } from './Rifle';
+import { Mentor } from './Mentor';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BoxGeometry,
@@ -923,6 +925,8 @@ function Stations(): JSX.Element | null {
             return <Oven key={def.id} def={def} k={k} />;
           case 'mixer':
             return <Mixer key={def.id} def={def} k={k} />;
+          case 'gunrack':
+            return <GunRack key={def.id} def={def} />;
           default:
             return null;
         }
@@ -1098,14 +1102,15 @@ function TutorialPin(): JSX.Element | null {
   const def = step ? TUTORIAL_STEP_BY_ID[step] : null;
   const onGuest = (step === 'guest_look' || step === 'guest_escort') && guest;
   const station = def?.target ? STATION_BY_ID[def.target] : null;
-  const label = onGuest ? '教學：那位客人' : station ? `教學：${station.label}` : '';
+  const puddle = useStore((s) => (s.kitchen?.tutorial?.step === 'puddle' ? s.kitchen.tutorial.puddle ?? null : null));
+  const label = onGuest ? '教學：那位客人' : puddle ? '教學：擦乾積水' : station ? `教學：${station.label}` : '';
   const tag = useMemo(() => (label ? nameTexture(label) : null), [label]);
   useFrame(({ clock }) => {
     if (!ref.current) return;
     ref.current.position.y = 2.25 + Math.sin(clock.elapsedTime * 2.4) * 0.08;
     ref.current.rotation.y = clock.elapsedTime * 1.6;
   });
-  const pos: [number, number] | null = onGuest ? [guest.x, guest.z] : station ? station.pos : null;
+  const pos: [number, number] | null = onGuest ? [guest.x, guest.z] : puddle ? puddle : station ? station.pos : null;
   if (!pos || !tag) return null;
   return (
     <group position={[pos[0], 0, pos[1]]}>
@@ -1335,7 +1340,10 @@ export default function Scene(): JSX.Element {
       <Monster />
       <Markers />
       <TutorialPin />
+      <Mentor />
       <Avatars me={role} />
+      <ViewRifle />
+      <MuzzleFlashes />
     </Canvas>
   );
 }

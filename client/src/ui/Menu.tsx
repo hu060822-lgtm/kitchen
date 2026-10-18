@@ -121,7 +121,7 @@ export default function Menu(): JSX.Element {
               <h3>第一次玩？</h3>
             </div>
             <div className="sec-body">
-              <p className="note">先走一遍「第一班」：一個人、沒有時間壓力，做一道煎蛋吐司，最後認識店裡的兩個威脅。大約 5 分鐘，中途隨時可以跳過。</p>
+              <p className="note">先走一遍「第一班」：夜班主廚老周會一步一步帶你——拿食材、換手和菜籃、煎蛋烤吐司、一次裝盤、調味出餐、擦地上的水，最後認識店裡的威脅和反制手段（鎖後門、來福槍、躲藏）。一個人、沒有時間壓力，大約 8 分鐘，中途隨時可以跳過。</p>
               <div className="row" style={{ marginTop: 10 }}>
                 <button
                   className="btn primary"

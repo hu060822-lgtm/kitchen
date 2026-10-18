@@ -1,3 +1,4 @@
+import { AvatarRifle } from '../Rifle';
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MeshLambertMaterial, type Group, type Sprite } from 'three';
@@ -104,6 +105,7 @@ function SkinnedAvatar({ role, asset }: { role: Seat; asset: CrewAsset }): JSX.E
       <group rotation={[0, Math.PI + asset.yaw, 0]} scale={asset.scale * size}>
         <primitive object={model} />
       </group>
+      <AvatarRifle role={role} size={size} />
       <NameTag role={role} crouchRef={crouchRef} size={size} />
     </group>
   );
@@ -158,6 +160,7 @@ function FallbackAvatar({ role }: { role: Seat }): JSX.Element {
           <meshBasicMaterial map={plate} />
         </mesh>
       </group>
+      <AvatarRifle role={role} />
       <NameTag role={role} crouchRef={crouchRef} />
     </group>
   );

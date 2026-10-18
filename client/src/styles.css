@@ -1095,3 +1095,48 @@ input[type='text'], input[type='number'], select, .status, .item-card, .log-entr
 .prompt .quick-take { max-width: min(92ch, 62vw); }
 /* 提示框以畫面中央為準：寬度照內容（不受「left: 50%」只剩半個畫面寬的限制） */
 .prompt { width: max-content; max-width: calc(86vw / var(--hud-scale, 1)); }
+
+/* ------------------------------ 來福槍的十字準心 ------------------------------ */
+.crosshair.rifle { width: 44px; height: 44px; margin: -22px; }
+.crosshair.rifle i { width: 3px; height: 3px; }
+.crosshair.rifle b { position: absolute; background: #efe8d6; box-shadow: 0 0 0 1px #000; transition: transform .08s, background .08s; }
+.crosshair.rifle .ch-l, .crosshair.rifle .ch-r { top: 21px; width: 12px; height: 2px; }
+.crosshair.rifle .ch-t, .crosshair.rifle .ch-b { left: 21px; width: 2px; height: 12px; }
+.crosshair.rifle .ch-l { left: 0; }
+.crosshair.rifle .ch-r { right: 0; }
+.crosshair.rifle .ch-t { top: 0; }
+.crosshair.rifle .ch-b { bottom: 0; }
+.crosshair.rifle.locked b, .crosshair.rifle.locked i { background: #e0473a; }
+.crosshair.rifle.locked .ch-l { transform: translateX(5px); }
+.crosshair.rifle.locked .ch-r { transform: translateX(-5px); }
+.crosshair.rifle.locked .ch-t { transform: translateY(5px); }
+.crosshair.rifle.locked .ch-b { transform: translateY(-5px); }
+
+/* ------------------------------ 教學：老周的對話卡 ------------------------------ */
+.tut-card.mentor { width: min(410px, calc(100vw - 32px)); padding: 10px 14px 12px; max-height: calc(100vh - 120px); overflow-y: auto; }
+.tut-progress { height: 3px; background: rgba(0, 0, 0, 0.12); margin: -2px 0 10px; }
+.tut-progress i { display: block; height: 100%; background: var(--brass); transition: width .4s ease; }
+.mentor-row { display: grid; grid-template-columns: 70px 1fr; gap: 12px; align-items: start; cursor: default; }
+.mentor-face { display: grid; justify-items: center; gap: 4px; }
+.mentor-portrait { display: block; border: 2px solid var(--ink); box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.35); }
+.mentor-portrait.talking .mp-mouth { animation: mp-talk .18s steps(2) infinite alternate; transform-origin: 40px 53px; }
+@keyframes mp-talk { from { transform: scaleY(0.4); } to { transform: scaleY(1.3); } }
+.mentor-name { display: grid; justify-items: center; font-family: var(--serif); font-weight: 700; font-size: var(--t-sm); line-height: 1.1; }
+.mentor-name small { font-family: var(--mono); font-weight: 400; font-size: calc(10.5px * var(--fk, 1)); color: var(--ink-3); letter-spacing: .06em; }
+.mentor-say { position: relative; background: rgba(255, 255, 255, 0.45); border: 1px solid rgba(0, 0, 0, 0.18); border-radius: 3px; padding: 8px 10px; min-height: 84px; }
+.mentor-say::before { content: ''; position: absolute; left: -7px; top: 22px; border: 6px solid transparent; border-right-color: rgba(0, 0, 0, 0.18); border-left: 0; }
+.mentor-say .tut-title { margin: 0 0 4px; }
+.say-line { margin: 0 0 4px; font-size: var(--t-sm); line-height: 1.7; color: var(--ink); }
+.say-line:last-child { margin-bottom: 0; }
+.say-line .caret { display: inline-block; width: 6px; height: 1em; margin-left: 2px; vertical-align: -2px; background: var(--ink-2); animation: caret .6s steps(2) infinite; }
+@keyframes caret { to { opacity: 0; } }
+.tut-task { margin-top: 10px; border-left: 3px solid var(--brass); padding: 4px 0 2px 10px; opacity: .45; transition: opacity .3s; }
+.tut-task.in { opacity: 1; }
+.task-tag { font-family: var(--mono); font-size: calc(10.5px * var(--fk, 1)); letter-spacing: .12em; color: var(--ink-3); }
+.tut-task .tut-text { color: var(--ink); font-weight: 600; }
+.tut-task kbd.mouse { font-size: .85em; }
+.tut-dots { display: flex; gap: 4px; margin: 6px 0 0; }
+.tut-dots i { width: 14px; height: 4px; background: rgba(0, 0, 0, 0.15); }
+.tut-dots i.done { background: var(--ink-3); }
+.tut-dots i.now { background: var(--brass); }
+@media (prefers-reduced-motion: reduce) { .mentor-portrait.talking .mp-mouth, .say-line .caret { animation: none; } }

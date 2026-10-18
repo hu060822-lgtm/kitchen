@@ -1,3 +1,4 @@
+import type { RiflePublic } from '../rifle';
 import type { PhysicsPublic } from '../physics';
 import type { TutorialPublic } from '../tutorial';
 import type { NightPublic } from '../nights';
@@ -16,6 +17,8 @@ export type Held =
   | { kind: 'crate'; storage: Storage }
   /** 一疊髒盤（徒手最多 4 個；潔癖主廚用托盤最多 6 個） */
   | { kind: 'dirty'; plate: number; bowl: number; tray?: boolean }
+  /** 後廚的來福槍（要用雙手；子彈數在 KitchenPublic.rifle） */
+  | { kind: 'rifle' }
   | null;
 
 /** 碗盤數量 */
@@ -115,7 +118,7 @@ export const CARRY_MAX = 2 + BASKET_SLOTS;
 export type HandSide = 'L' | 'R';
 export const HAND_LABEL: Record<HandSide, string> = { L: '左手', R: '右手' };
 /** 要用雙手拿的東西 */
-export const isTwoHanded = (h: Held): boolean => h?.kind === 'crate' || h?.kind === 'dirty';
+export const isTwoHanded = (h: Held): boolean => h?.kind === 'crate' || h?.kind === 'dirty' || h?.kind === 'rifle';
 /** 成品架（處理好的食材放這裡，肉與其他分開）的容量 */
 export const RACK_CAPACITY = 6;
 
@@ -248,6 +251,8 @@ export interface ShiftStats {
   rescued: number;
   /** 自己掙脫鐵籠的次數 */
   escaped: number;
+  /** 來福槍打中怪物的次數 */
+  rifleHits?: number;
 }
 
 export interface KitchenPublic {
@@ -272,6 +277,8 @@ export interface KitchenPublic {
   /** 門禁（監視器）：防火門與後門共用冷卻 readyAt */
   fireDoor: { closedUntil: number; readyAt: number };
   backDoor: { closedUntil: number };
+  /** 後廚的來福槍：剩幾發、誰拿著 */
+  rifle?: RiflePublic;
   threats: ThreatsPublic;
   stats: ShiftStats;
   /** 互助狀態：缺陷卡、交接、便條、標記、傳聞、準備提示（所有人一樣） */

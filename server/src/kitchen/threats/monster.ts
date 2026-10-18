@@ -686,8 +686,14 @@ export class Monster {
   }
 
   /** 反制：緊急照明（監視器）——強光把牠逼回後門，要更久才會再來 */
-  repel(w: ThreatWorld): boolean {
+  repel(w: ThreatWorld, cause: 'flash' | 'rifle' = 'flash'): boolean {
     if (!this.present || this.mode === 'leave') return false;
+    if (cause === 'rifle') {
+      w.emit({ kind: 'monster_sound', sound: 'screech', visual: 'hit', text: '打中了——牠尖叫著逃回後門。', at: [this.x, this.z], critical: true }, 'all');
+      this.stunUntil = 0;
+      this.startLeave(w, '被來福槍打中', MONSTER.flashed);
+      return true;
+    }
     w.emit({ kind: 'monster_sound', sound: 'growl', visual: 'flash', text: '緊急照明全亮——牠尖叫著退回後門了。', at: [this.x, this.z], critical: true }, 'all');
     this.startLeave(w, '緊急照明', MONSTER.flashed);
     return true;

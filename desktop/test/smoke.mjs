@@ -75,7 +75,7 @@ try {
   // 教學：從起始頁面進去，教學卡出現；跳過後回到開始遊戲
   await win.click('.mt-item:has-text("教學")');
   await win.waitForSelector('.tut-card', { timeout: 40000 });
-  check((await win.textContent('.tut-card')).includes('第一班'), '起始頁面的「教學」：直接開始「第一班」，畫面上有教學卡');
+  check((await win.textContent('.tut-card')).includes('第一班') && (await win.textContent('.tut-card')).includes('老周'), '起始頁面的「教學」：直接開始「第一班」，畫面上有老周的教學卡');
   await sleep(2500);
   await win.screenshot({ path: path.join(shots, '01b-tutorial.png') });
   await win.evaluate(() => document.exitPointerLock());

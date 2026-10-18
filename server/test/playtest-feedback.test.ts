@@ -80,22 +80,22 @@ describe('物品欄：左手、右手、菜籃 2 格', () => {
     expect(b.act('P1', 'fridge', 'take', { type: 'tomato' }).ok).toBe(false);
   });
 
-  it('用掉目前的手：菜籃先補；菜籃空了就改用另一隻手', () => {
+  it('用掉目前的手：先改用另一隻拿著東西的手；兩隻手都空了才從菜籃補', () => {
     const b = bench();
     b.open();
     b.act('P1', 'fridge', 'take', { type: 'egg', count: 3 });
     const p = b.sim.players.P1;
     const side = p.side;
     expect(b.act('P1', 'prep_b', 'place').ok).toBe(true);
-    // 菜籃那一份補到手上
-    expect(p.held?.kind).toBe('item');
-    expect(p.basket.length).toBe(0);
-    expect(p.side).toBe(side);
-    b.act('P1', 'prep_a', 'place');
-    // 菜籃空了：換成另一隻手
+    // 換成另一隻拿著蛋的手（菜籃那份還在）
     expect(p.held?.kind).toBe('item');
     expect(p.other).toBeNull();
+    expect(p.basket.length).toBe(1);
     expect(p.side).not.toBe(side);
+    b.act('P1', 'prep_a', 'place');
+    // 兩隻手都空了：菜籃那一份補到手上
+    expect(p.held?.kind).toBe('item');
+    expect(p.basket.length).toBe(0);
   });
 
   it('一隻手拿著盤子，另一隻手還能拿東西；動作要用的東西在另一隻手時自動換手', () => {

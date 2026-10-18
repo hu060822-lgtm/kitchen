@@ -1,4 +1,4 @@
-import { TUTORIAL_STEPS, TUTORIAL_STEP_BY_ID, type KitchenActionPayload, type KitchenActionResult, type Seat, type TutorialPublic, type TutorialStepId } from '@last-table/shared';
+import { RIFLE, TUTORIAL_STEPS, TUTORIAL_STEP_BY_ID, type KitchenActionPayload, type KitchenActionResult, type Seat, type TutorialPublic, type TutorialStepId } from '@last-table/shared';
 import { GUEST_SPOTS, type ThreatDirector } from './threats';
 import type { KitchenSim } from './sim';
 
@@ -21,6 +21,11 @@ export class Tutorial {
   watchedMs = 0;
   escortsAtStart = 0;
   sawMonster = false;
+  /** 進入「換手」時按過幾次 B */
+  cyclesAtStart = 0;
+  /** 「地上的水」灑的那一灘 */
+  puddleId: string | null = null;
+  puddleAt: [number, number] | null = null;
   /** 出生點（判斷「走了幾步」） */
   private readonly start: Partial<Record<Seat, [number, number]>> = {};
 
@@ -45,7 +50,13 @@ export class Tutorial {
   }
 
   public(): TutorialPublic {
-    return { step: this.step, index: this.idx, total: TUTORIAL_STEPS.length, ...(this.score !== undefined ? { score: this.score } : {}) };
+    return {
+      step: this.step,
+      index: this.idx,
+      total: TUTORIAL_STEPS.length,
+      ...(this.score !== undefined ? { score: this.score } : {}),
+      ...(this.step === 'puddle' && this.puddleAt ? { puddle: this.puddleAt } : {}),
+    };
   }
 
   /** 玩家確認（讀完說明、打開了訂單板／食譜） */
@@ -88,6 +99,23 @@ export class Tutorial {
         // 第一張單：煎蛋吐司（很有耐心的客人）
         sim.addPlannedOrder({ at: 0, kind: 'signature', recipeId: 'egg_toast', table: 3, patience: 40 });
         break;
+      case 'hands':
+        this.cyclesAtStart = sim.slotCycles;
+        break;
+      case 'puddle': {
+        // 出餐口和中島之間的走道上灑一灘水（每個人一定會經過的地方）
+        const pud = sim.physics.spill(0.6, 11.9, 0.6, 'water');
+        this.puddleId = pud?.id ?? null;
+        this.puddleAt = pud ? [pud.x, pud.z] : null;
+        if (pud) sim.emitAll({ kind: 'coop', sense: 'sound', sound: 'drop', text: '嘩——有人把一桶水打翻在地上。', at: [pud.x, pud.z] });
+        break;
+      }
+      case 'backdoor':
+        if (th) sim.emitAll({ kind: 'monster_sound', sound: 'scratch', visual: 'flicker', text: '後門外有東西在刮門。', at: [8.9, 25.7], critical: true });
+        break;
+      case 'rifle':
+        sim.rifleAmmo = RIFLE.ammo;
+        break;
       case 'guest_look':
         if (th) {
           // 坐在離旋轉門最近的位子，安靜一陣子（讓玩家走過去看他）
@@ -108,6 +136,11 @@ export class Tutorial {
         break;
       case 'monster':
         if (th) {
+          // 教學：後門的鎖打開、門禁冷卻清掉；牠走得比平常慢，比較好瞄準
+          sim.backDoor = { closedUntil: 0 };
+          sim.fireDoor = { closedUntil: 0, readyAt: 0 };
+          if (sim.rifleAmmo <= 0) sim.rifleAmmo = RIFLE.ammo;
+          th.monster.tune.speed = 0.5;
           th.monster.forceEmerge(sim);
           this.sawMonster = false;
         }
@@ -124,7 +157,11 @@ export class Tutorial {
       // 他回到座位上，教學接下來不再動
       th.guest.calmUntil = sim.t + 1e9;
     }
-    if (id === 'monster') th.monster.banish();
+    if (id === 'monster') {
+      th.monster.banish();
+      th.monster.tune.speed = 1;
+      sim.rifleAmmo = RIFLE.ammo;
+    }
   }
 
   /** 這一步做到了沒有 */
@@ -140,8 +177,12 @@ export class Tutorial {
           const s = this.start[r];
           return !!p && !!s && Math.hypot(p.x - s[0], p.z - s[1]) >= 2.5;
         });
-      case 'fridge':
-        return has('egg');
+      case 'fridge': {
+        const eggs = items.filter((i) => i.type === 'egg').length + plates.reduce((n, p) => n + p.components.filter((c) => c.type === 'egg').length, 0);
+        return sim.seats.some((r) => sim.players[r].basket.length > 0) || (eggs >= 2 && has('butter')) || plates.some((p) => p.components.some((c) => c.type === 'egg') && p.components.some((c) => c.type === 'butter'));
+      }
+      case 'hands':
+        return sim.slotCycles - this.cyclesAtStart >= 2;
       case 'pantry':
         return has('bread');
       case 'toaster':
@@ -154,12 +195,20 @@ export class Tutorial {
         const all = [...items, ...plates.flatMap((p) => p.components)];
         return all.some(toast) && all.some(egg);
       }
-      case 'plate':
+      case 'plate_all':
         return plates.some((p) => p.components.some((c) => c.type === 'bread') && p.components.some((c) => c.type === 'egg')) || sim.stats.served > 0;
+      case 'butter':
+        return plates.some((p) => p.components.some((c) => c.type === 'butter')) || sim.stats.served > 0;
       case 'season':
         return plates.some((p) => (p.seasoning.salt ?? 0) > 0 && (p.seasoning.pepper ?? 0) > 0) || sim.stats.served > 0;
       case 'serve':
         return sim.stats.served > 0;
+      case 'puddle':
+        return !this.puddleId || !sim.physics.public().puddles.some((p) => p.id === this.puddleId);
+      case 'backdoor':
+        return sim.backClosed;
+      case 'rifle':
+        return sim.rifleHolder() !== null;
       case 'guest_look':
         if (!th) return true;
         if (th.guest.observed) this.watchedMs += dtMs;

@@ -33,7 +33,7 @@ export interface MovePayload {
 }
 
 /** sleepy：嗜睡學徒的睡意設成 99；sneeze_soon：定時噴嚏 4 秒後打噴嚏（測試與截圖用） */
-export type DebugCommand = 'skip_prep' | 'end_shift' | 'spawn_guest' | 'spawn_monster' | 'monster_off' | 'restock' | 'reinit_room' | 'sleepy' | 'sneeze_soon' | 'monster_grab_me' | 'guest_off' | 'spill_here';
+export type DebugCommand = 'skip_prep' | 'end_shift' | 'spawn_guest' | 'spawn_monster' | 'monster_off' | 'restock' | 'reinit_room' | 'sleepy' | 'sneeze_soon' | 'monster_grab_me' | 'guest_off' | 'spill_here' | 'monster_front';
 
 /** 開發者工具看到的內部狀態（只在開發環境） */
 export interface DebugState {
