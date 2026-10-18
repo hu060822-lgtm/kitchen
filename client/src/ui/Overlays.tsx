@@ -738,6 +738,11 @@ export function DisplaySettings(): JSX.Element {
         <span>{Math.round((prefs.uiScale ?? 1.1) * 100)}%</span>
       </label>
       <label className="slider">
+        字體大小
+        <input type="range" min={0.9} max={1.8} step={0.05} value={prefs.fontScale ?? 1.15} onChange={(e) => useStore.getState().setPrefs({ fontScale: Number(e.target.value) })} />
+        <span>{Math.round((prefs.fontScale ?? 1.15) * 100)}%</span>
+      </label>
+      <label className="slider">
         畫面亮度
         <input type="range" min={0.8} max={1.8} step={0.05} value={prefs.brightness ?? 1.2} onChange={(e) => useStore.getState().setPrefs({ brightness: Number(e.target.value) })} />
         <span>{Math.round((prefs.brightness ?? 1.2) * 100)}%</span>

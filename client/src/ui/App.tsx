@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useStore } from '../state/store';
 import ContinuePage from './ContinuePage';
 import GameScreen from './GameScreen';
@@ -37,6 +38,15 @@ function OutOfRoom(): JSX.Element {
   }
 }
 
+/** 字體大小（設定）：寫進根元素的 --fk，所有字級一起縮放 */
+function FontScale(): null {
+  const k = useStore((s) => s.prefs.fontScale ?? 1.15);
+  useEffect(() => {
+    document.documentElement.style.setProperty('--fk', String(k));
+  }, [k]);
+  return null;
+}
+
 export default function App(): JSX.Element {
   const session = useStore((s) => s.session);
   const room = useStore((s) => s.room);
@@ -49,6 +59,7 @@ export default function App(): JSX.Element {
       {screen}
       <ConnBanner />
       <MusicDirector />
+      <FontScale />
     </>
   );
 }

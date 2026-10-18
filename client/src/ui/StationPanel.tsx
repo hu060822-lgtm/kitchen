@@ -1229,6 +1229,9 @@ function TaskBar({ k, role }: { k: KitchenPublic; role: Seat }): JSX.Element | n
   );
 }
 
+/** 要從很多項目裡挑的面板（食材、調味料、出餐選單、監視器）放在畫面正中間，比較好看、好點 */
+const CENTERED = new Set<string>(['fridge', 'pantry', 'spice', 'pass', 'cctv']);
+
 export default function StationPanel(): JSX.Element | null {
   const station = useStore((s) => s.station);
   const k = useStore((s) => s.kitchen);
@@ -1273,7 +1276,7 @@ export default function StationPanel(): JSX.Element | null {
   const res = station.result;
 
   return (
-    <div className="modal-bg station-bg" role="dialog" aria-modal="true" aria-label={def.label} onMouseDown={(e) => e.target === e.currentTarget && closeStation()}>
+    <div className={`modal-bg station-bg ${CENTERED.has(def.kind) ? 'center' : ''}`} role="dialog" aria-modal="true" aria-label={def.label} onMouseDown={(e) => e.target === e.currentTarget && closeStation()}>
       <div className={`modal station k-${def.kind}`}>
         <header>
           <span className="plateno">{ZONE_BY_ID[def.zone].label}</span>

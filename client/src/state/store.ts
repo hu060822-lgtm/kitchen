@@ -87,13 +87,15 @@ export interface Prefs {
   brightness: number;
   /** 燈光閃爍（怪物靠近、事件時的閃燈效果） */
   flicker: boolean;
+  /** 字體大小（0.9–1.8）：所有文字一起放大縮小 */
+  fontScale: number;
   /** 設定的版本（舊版的預設值要換成新的） */
   prefsVersion?: number;
 }
 
 const PREFS_KEY = 'last-table.prefs';
 function loadPrefs(): Prefs {
-  const def: Prefs = { volume: 0.8, sensitivity: 1, speech: false, retro: false, uiScale: 1.1, mono: false, envVolume: 1, echoVolume: 1, navVolume: 1, voiceVolume: 1, beacon: false, musicVolume: 0.5, brightness: 1.2, flicker: true, prefsVersion: 2 };
+  const def: Prefs = { volume: 0.8, sensitivity: 1, speech: false, retro: false, uiScale: 1.1, mono: false, envVolume: 1, echoVolume: 1, navVolume: 1, voiceVolume: 1, beacon: false, musicVolume: 0.5, brightness: 1.2, flicker: true, fontScale: 1.15, prefsVersion: 2 };
   try {
     const raw = kv.get(PREFS_KEY);
     if (raw) {
