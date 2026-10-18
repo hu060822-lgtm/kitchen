@@ -333,6 +333,12 @@ export async function playNight(night: number): Promise<string | null> {
   return r.ok ? null : r.error;
 }
 
+/** 大廳：沒有怪物的模式（只有房主能切換） */
+export async function setNoMonster(noMonster: boolean): Promise<string | null> {
+  const r = await call<Ack>((cb) => socket.emit('room:options', { noMonster }, cb));
+  return r.ok ? null : r.error;
+}
+
 /** 無盡模式：大廳裡選（從第 1 天開始） */
 export async function setEndless(): Promise<string | null> {
   const r = await call<Ack>((cb) => socket.emit('room:night', { night: 0, endless: true }, cb));

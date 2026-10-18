@@ -5,7 +5,7 @@ import { bench } from './bench';
 const quick = (b: ReturnType<typeof bench>, station: string, mode: 'primary' | 'use' = 'primary') => b.act('P1', station, 'quick', { mode });
 
 describe('快速操作', () => {
-  it('左鍵放上平底鍋、右鍵開火／關火、左鍵拿起來', () => {
+  it('左鍵放上平底鍋、右鍵開火、開著火時右鍵翻面、左鍵拿起來；空鍋右鍵關火', () => {
     const b = bench({ seats: ['P1'] });
     b.open();
     expect(b.act('P1', 'fridge', 'take', { type: 'egg' }).ok).toBe(true);
@@ -15,10 +15,14 @@ describe('快速操作', () => {
     const on = quick(b, 'pan_a', 'use');
     expect(on.ok).toBe(true);
     expect(b.sim.publicState().stations.pan_a.heat).toBe('MED');
-    quick(b, 'pan_a', 'use');
-    expect(b.sim.publicState().stations.pan_a.heat).toBe('OFF');
+    // 開著火、鍋裡有東西：右鍵翻面（火不變）
+    expect(quick(b, 'pan_a', 'use').ok).toBe(true);
+    expect(b.sim.publicState().stations.pan_a.heat).toBe('MED');
     expect(quick(b, 'pan_a').ok).toBe(true);
     expect(b.sim.players.P1.held?.kind).toBe('item');
+    // 空鍋：右鍵關火
+    quick(b, 'pan_a', 'use');
+    expect(b.sim.publicState().stations.pan_a.heat).toBe('OFF');
   });
 
   it('裝盤區：手上有食材、沒有盤子 → 自動拿盤子再裝盤；空手再按一次就端起盤子；在出餐口按左鍵出餐', () => {

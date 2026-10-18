@@ -1,7 +1,7 @@
 {
   "name": "null-last-table-desktop",
   "productName": "NULL 最後一桌",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "description": "《NULL：最後一桌》Windows 應用程式：線上模式、自己開房（可存檔）、加入別人的房間",
   "author": "NULL: Last Table",

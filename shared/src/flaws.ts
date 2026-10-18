@@ -494,6 +494,8 @@ export interface FlawEffectConfig {
     /** 睡多久、醒來後的睡意、最多能撐多久 */
     sleepMs: number;
     wakeTo: number;
+    /** 隊友拍一下降多少睡意 */
+    tapRelief: number;
     postponeMaxMs: number;
     /** 洗把臉：動作時間、減少多少、冷卻 */
     splashMs: number;
@@ -598,7 +600,8 @@ export const DEFAULT_FLAW_CONFIG: FlawEffectConfig = {
     heavyAt: 85,
     sleepAt: 100,
     sleepMs: 5000,
-    wakeTo: 35,
+    wakeTo: 20,
+    tapRelief: 25,
     postponeMaxMs: 8000,
     splashMs: 2000,
     splashRelief: 40,

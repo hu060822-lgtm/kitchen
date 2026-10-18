@@ -32,7 +32,7 @@ import type { ThreatWorld } from './types';
  */
 
 export const MONSTER = {
-  speed: { patrol: 2.0, investigate: 2.4, chase: 3.8, search: 2.0, leave: 2.2 },
+  speed: { patrol: 1.8, investigate: 2.2, chase: 3.1, search: 1.8, leave: 2.2 },
   fovCos: Math.cos((70 * Math.PI) / 180),
   sight: { bright: 12, dim: 8, dark: 6 } as Record<'bright' | 'dim' | 'dark', number>,
   crouch: 0.6,
@@ -48,17 +48,17 @@ export const MONSTER = {
   lookSweep: 1.0,
   searchMs: 6000,
   investigateWaitMs: 3000,
-  windupMs: 750,
-  windupRange: 1.3,
-  grabRange: 1.6,
-  hungerEnter: 60,
+  windupMs: 1000,
+  windupRange: 1.2,
+  grabRange: 1.4,
+  hungerEnter: 110,
   /** 每個噪音事件讓飢餓值增加：半徑 × 這個係數 */
   hungerPerNoise: 1.2,
   patrolMaxMs: 75_000,
   /** 進廚房前在後門外刮門的時間：這段時間裡鎖上後門（監視器）就進不來 */
   warnMs: 6_000,
   /** 每次進來最多待多久（從進門算起，不分區域），時間到從後門離開 */
-  stayMs: 60_000,
+  stayMs: 40_000,
   /** 追同一個人最多多久，之後換追另一個（最近的） */
   switchMs: 20_000,
   /** 離開前多久預警 */
@@ -68,10 +68,14 @@ export const MONSTER = {
   /** 被防火門擋回去之後的飢餓值 */
   repelled: -15,
   /** 後門鎖著時，飢餓值最多累積到這裡 */
-  hungerCap: 90,
+  hungerCap: 150,
   /** 抓到人之後的飢餓值（負數＝要更久才會再出現） */
   sated: -30,
   hiddenWaitMs: 4000,
+  /** 被丟中愣住多久 */
+  stunMs: 3000,
+  /** 緊急照明把牠逼走後的飢餓值（要更久才會再來） */
+  flashed: -40,
 } as const;
 
 /** 巡邏路線：後走廊 → 冷藏室 → 廚房的爐台一帶 → 乾貨室 → 側走廊 → 防火門內側 */
@@ -145,6 +149,8 @@ export class Monster {
   grabbed = false;
   /** 上一次滴水的時間 */
   lastDrip = 0;
+  /** 被東西砸中：愣住到這個時間 */
+  stunUntil = 0;
   /** 最近一次 tick 的時間（快照用） */
   now = 0;
   private stayWarned = false;
@@ -370,6 +376,12 @@ export class Monster {
         w.emit({ kind: 'monster_sound', text: '牠轉身，拖著腳步往後門走了。', at: [this.x, this.z] }, 'all');
         return this.startLeave(w, '待滿時間', this.grabbed ? MONSTER.sated : this.tune.returnHunger);
       }
+    }
+
+    // 被丟中：愣在原地（撲抓也中斷）
+    if (t < this.stunUntil) {
+      if (this.mode === 'windup') this.setMode('chase', t, '被砸中');
+      return;
     }
 
     // 牠身上是濕的：在廚房、冷藏室、乾貨室裡每隔幾秒滴下一灘水（跑過去會滑倒）
@@ -665,6 +677,22 @@ export class Monster {
     this.path.push({ x: NAV_BY_ID.OUT.x, z: NAV_BY_ID.OUT.z });
   }
 
+  /** 反制：被丟過來的東西砸中（落點 1.5 公尺內）→ 愣住 3 秒 */
+  stun(x: number, z: number, w: ThreatWorld): boolean {
+    if (!this.present || this.mode === 'leave' || Math.hypot(x - this.x, z - this.z) > 1.5) return false;
+    this.stunUntil = w.t + MONSTER.stunMs;
+    w.emit({ kind: 'monster_sound', sound: 'growl', text: '砸中了！牠愣住了幾秒——快跑。', at: [this.x, this.z], critical: true }, 'all');
+    return true;
+  }
+
+  /** 反制：緊急照明（監視器）——強光把牠逼回後門，要更久才會再來 */
+  repel(w: ThreatWorld): boolean {
+    if (!this.present || this.mode === 'leave') return false;
+    w.emit({ kind: 'monster_sound', sound: 'growl', visual: 'flash', text: '緊急照明全亮——牠尖叫著退回後門了。', at: [this.x, this.z], critical: true }, 'all');
+    this.startLeave(w, '緊急照明', MONSTER.flashed);
+    return true;
+  }
+
   /** 玩家躲進置物櫃：如果牠正在追這個人而且看得到，就記住是哪個櫃子 */
   onHide(role: Seat, w: ThreatWorld): void {
     if (this.mode !== 'chase' || this.target !== role) return;
@@ -722,6 +750,7 @@ export class Monster {
       kitchenLeft: this.present && Number.isFinite(this.kitchenLeft) ? Math.max(0, Math.round(this.kitchenLeft)) : null,
       restless: this.present || this.mode === 'lurk' ? 1 : Math.max(0, Math.min(1, this.hunger / (MONSTER.hungerEnter * this.tune.hunger))),
       warnLeft: this.mode === 'lurk' ? Math.max(0, Math.round(this.lurkUntil - this.now)) : null,
+      stunLeft: this.stunUntil > this.now ? Math.round(this.stunUntil - this.now) : null,
     };
   }
 

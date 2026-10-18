@@ -1,7 +1,7 @@
 import { handsFull } from '../ui/kitchenText';
 import { nextTab, tabIds } from './storageTabs';
 import { actionOf, isAction } from './keymap';
-import { CARRY_MAX, INGREDIENTS, INGREDIENT_IDS, RESTAURANT_ACOUSTICS, SEATS, STATIONS, ZONES, flawBodyScale, flawSpeedMultiplier, forwardOf, planQuick, PHYSICS, type Body, type IngredientId, type KitchenPublic, type QuickMode, type QuickPlan, type Seat, type StationDef, type StationKind } from '@last-table/shared';
+import { CARRY_MAX, INGREDIENTS, INGREDIENT_IDS, SEASONING_IDS, RESTAURANT_ACOUSTICS, SEATS, STATIONS, ZONES, flawBodyScale, flawSpeedMultiplier, forwardOf, planQuick, PHYSICS, type Body, type IngredientId, type KitchenPublic, type QuickMode, type QuickPlan, type Seat, type StationDef, type StationKind } from '@last-table/shared';
 import { audio, type LoopSpec } from '../audio/engine';
 import { speak } from '../audio/speech';
 import { act, coop, emitMark, sendMove, sendStance } from '../net/socket';
@@ -227,7 +227,19 @@ function pressT(): void {
     return;
   }
   const t = tossTarget();
-  void coop('toss', t ? { to: t.seat } : {});
+  void coop('toss', t ? { to: t.seat } : monsterAimed() ? { to: 'monster' } : {});
+}
+
+/** 準心對著後門的東西（丟東西砸牠：愣住 3 秒） */
+export function monsterAimed(): number | null {
+  const m = useStore.getState().kitchen?.threats.monster;
+  if (!m?.present) return null;
+  const [fx, fz] = forwardOf(pose.yaw);
+  const vx = m.x - pose.x;
+  const vz = m.z - pose.z;
+  const d = Math.hypot(vx, vz);
+  if (d > PHYSICS.toss.range || d < 0.3) return null;
+  return (vx * fx + vz * fz) / d >= 0.94 ? d : null;
 }
 
 /** V：缺陷卡的技能（大嗓門召集、定時噴嚏送出氣味警告、嗜睡學徒的雙爐面板） */
@@ -348,7 +360,7 @@ export function quickPlanFor(mode: QuickMode, r: Seat, def: StationDef): QuickPl
   const me = k?.players[r];
   const s = k?.stations[def.id];
   if (!k || !me || !s) return null;
-  return planQuick(mode, def, s, me, k.orders.filter((o) => o.status === 'open').length);
+  return planQuick(mode, def, s, me, k.orders.filter((o) => o.status === 'open').length, { monsterIn: !!k.threats.monster?.present });
 }
 
 /** 滑鼠點擊（鎖定滑鼠、沒有面板時）：左鍵＝拿／放，右鍵＝使用；要選擇的事才打開面板 */
@@ -413,6 +425,41 @@ function quickTake(n: number, max: boolean): boolean {
   if (!type) return false;
   void act(def.id, 'take', { type, count: max ? CARRY_MAX : 1 });
   return true;
+}
+
+/** 數字鍵一鍵操作（不用打開面板）：看著爐子／烤箱設火力、看著烤麵包機選段數、看著調味區量調味料、看著監視器用門禁 */
+export const HEAT_KEYS = ['OFF', 'LOW', 'MED', 'HIGH'] as const;
+function quickDigit(n: number, shift: boolean): boolean {
+  const r = role();
+  const k = useStore.getState().kitchen;
+  if (!r || !k || myStatus(k, r) !== 'ok') return false;
+  const def = currentTarget(r, guestAt(k))?.station;
+  if (!def) return false;
+  switch (def.kind) {
+    case 'pan':
+    case 'stove':
+    case 'oven':
+      if (n > 4) return false;
+      void act(def.id, 'heat', { level: HEAT_KEYS[n - 1] });
+      return true;
+    case 'toaster':
+      if (n > 5) return false;
+      void act(def.id, 'start', { level: n });
+      return true;
+    case 'spice': {
+      const id = SEASONING_IDS[n - 1];
+      if (!id) return false;
+      void act(def.id, 'measure', { seasoning: id, units: shift ? 1 : 0.5 });
+      return true;
+    }
+    case 'cctv': {
+      const a = ['fire_door', 'back_door', 'flash'][n - 1];
+      if (!a) return false;
+      void act(def.id, a);
+      return true;
+    }
+  }
+  return false;
 }
 
 /** 注視冷藏架／乾貨架時按 0：換到下一個分類 */
@@ -533,7 +580,7 @@ export function bindInput(el: HTMLElement): () => void {
     // 面板開著時，空白鍵與數字鍵交給面板（切菜節奏、按鈕）
     if (st.station && (e.code === 'Space' || isAction(e.code, 'chop') || /^Digit\d$/.test(e.code) || e.code === 'Tab' || e.code === 'Enter')) return;
     // 注視冷藏架／乾貨架時按數字鍵：不用打開面板就直接拿（Shift＋數字＝一次拿到滿）
-    if (!st.station && !st.mate && /^Digit[1-9]$/.test(e.code) && quickTake(Number(e.code.slice(5)), e.shiftKey)) return;
+    if (!st.station && !st.mate && /^Digit[1-9]$/.test(e.code) && (quickTake(Number(e.code.slice(5)), e.shiftKey) || quickDigit(Number(e.code.slice(5)), e.shiftKey))) return;
     if (!st.station && !st.mate && e.code === 'Digit0' && quickTab()) return;
     if (e.code === 'Backquote') {
       if (st.debug) st.set({ debugOpen: !st.debugOpen });

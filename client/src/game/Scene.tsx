@@ -426,21 +426,23 @@ function Lights(): JSX.Element {
   const back = useRef<Array<PointLight | null>>([]);
   const dip = useRef(0);
   useEffect(() => on('fx', (f) => {
-    if (f.visual === 'flicker') dip.current = 0.9;
+    if (f.visual === 'flicker') dip.current = 0.5;
   }), []);
   useFrame(({ clock }, dt) => {
     dip.current = Math.max(0, dip.current - dt);
+    // 燈光閃爍可以在設定裡關掉（試玩回饋：一直閃很惱人）
+    const allow = useStore.getState().prefs.flicker ?? true;
     const d = monsterDistance();
-    const near = d < 9 ? 1 - d / 9 : 0;
+    const near = allow && d < 6 ? 1 - d / 6 : 0;
     const t = clock.elapsedTime;
-    // 不規則的閃爍：兩個不同頻率的方波疊加，越近越頻繁
-    const flick = near > 0 && Math.sin(t * 23) * Math.sin(t * 7.3) > 1 - near * 0.9 ? 0.15 : 1;
-    const dipK = dip.current > 0 && Math.sin(t * 40) > 0 ? 0.2 : 1;
+    // 偶爾暗一下（不是一直閃）：慢的方波疊加，只有很近時才比較頻繁，而且只暗到一半
+    const flick = near > 0 && Math.sin(t * 6.1) * Math.sin(t * 2.3) > 1 - near * 0.45 ? 0.55 : 1;
+    const dipK = allow && dip.current > 0 && Math.sin(t * 18) > 0.4 ? 0.5 : 1;
     kitchen.current.forEach((l, i) => {
-      if (l) l.intensity = 9 * flick * dipK * (i === 1 && near > 0.5 ? 0.6 : 1);
+      if (l) l.intensity = 11 * flick * dipK * (i === 1 && near > 0.6 ? 0.8 : 1);
     });
     back.current.forEach((l, i) => {
-      if (l) l.intensity = BACK_LIGHTS[i].i * (near > 0 && Math.sin(t * 17 + i) > 0.3 ? 0.1 : 1) * dipK;
+      if (l) l.intensity = BACK_LIGHTS[i].i * 1.8 * (near > 0.3 && Math.sin(t * 4 + i) > 0.85 ? 0.5 : 1) * dipK;
     });
     M.tube.color.set(flick < 1 || dipK < 1 ? '#3A3F40' : '#E4ECEE');
   });
@@ -1170,10 +1172,14 @@ function Rig(): null {
   useEffect(() => {
     camera.rotation.order = 'YXZ';
     scene.background = new Color('#0C0E0E');
-    scene.fog = new FogExp2('#0C0E0E', 0.07);
+    scene.fog = new FogExp2('#0C0E0E', 0.045);
     gl.toneMapping = NeutralToneMapping;
-    gl.toneMappingExposure = 1.05;
   }, [camera, scene, gl]);
+  // 畫面亮度（設定）
+  const brightness = useStore((s) => s.prefs.brightness ?? 1.2);
+  useEffect(() => {
+    gl.toneMappingExposure = 1.05 * brightness;
+  }, [gl, brightness]);
   // 怪物衝過來、撲上來：視角短暫震動（事件連動）
   useEffect(
     () =>
@@ -1308,8 +1314,8 @@ export default function Scene(): JSX.Element {
       style={{ position: 'absolute', inset: 0 }}
     >
       <Rig />
-      <hemisphereLight args={['#76838A', '#1A1512', 0.55]} />
-      <ambientLight intensity={0.05} color="#9AA8AC" />
+      <hemisphereLight args={['#76838A', '#1A1512', 0.85]} />
+      <ambientLight intensity={0.16} color="#9AA8AC" />
       <Lights />
       {ZONES.map((z) => (
         <ZoneShell key={z.id} id={z.id} />

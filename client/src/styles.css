@@ -33,12 +33,12 @@
   --serif: 'Noto Serif TC', 'Noto Serif CJK TC', 'Songti TC', 'PMingLiU', 'MingLiU', serif;
 
   /* 字級：以 16px 為基準的 1.25 比例 */
-  --t-xs: 12px;
-  --t-sm: 13.5px;
-  --t-md: 16px;
-  --t-lg: 20px;
-  --t-xl: 25px;
-  --t-2xl: 31px;
+  --t-xs: 13px;
+  --t-sm: 14.5px;
+  --t-md: 17px;
+  --t-lg: 21px;
+  --t-xl: 26px;
+  --t-2xl: 32px;
 
   --rule: 1px solid var(--ink);
   --rule-soft: 1px solid var(--bone-3);
@@ -387,8 +387,8 @@ canvas.retro, .retro canvas { image-rendering: pixelated; }
 /* 畫面效果 */
 .fx.charge { box-shadow: inset 0 0 120px 40px rgba(10, 6, 6, 0.85); animation: fx-fade .7s ease-out forwards; }
 .fx.lunge { background: radial-gradient(ellipse at center, transparent 30%, rgba(80, 16, 10, 0.55)); animation: fx-fade .6s ease-out forwards; }
-.fx.flicker { background: #000; animation: fx-flicker .5s steps(5) forwards; }
-@keyframes fx-flicker { 0% { opacity: .85; } 20% { opacity: 0; } 40% { opacity: .7; } 60% { opacity: .1; } 100% { opacity: 0; } }
+.fx.flicker { background: #000; animation: fx-flicker .5s steps(5) forwards; opacity: .5; }
+@keyframes fx-flicker { 0% { opacity: .45; } 30% { opacity: 0; } 55% { opacity: .3; } 100% { opacity: 0; } }
 
 /* ============================== 工作站面板 ============================== */
 
@@ -533,9 +533,9 @@ canvas.retro, .retro canvas { image-rendering: pixelated; }
 
 /* ============================== 精簡介面：遊戲畫面為主 ============================== */
 /* --hud-scale 由設定（說明 → 介面大小）控制，預設 0.85 */
-.game { --hud-scale: 0.85; }
+.game { --hud-scale: 1.1; }
 .hud, .mate-panel, .modal.station { zoom: var(--hud-scale); }
-.hud { font-size: 13px; }
+.hud { font-size: 14px; }
 .plate { background: rgba(232, 229, 220, 0.82); }
 .rail { flex-wrap: nowrap; gap: 6px; max-width: calc(100vw / var(--hud-scale) - 220px); }
 .clock { min-width: 0; padding: 4px 9px 5px; }
@@ -1070,3 +1070,12 @@ input[type='text'], input[type='number'], select, .status, .item-card, .log-entr
 .physics-prompts { position: absolute; left: 50%; top: calc(50% + 58px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .physics-prompts .prompt { position: static; transform: none; }
 .prompt.wet { border-color: #6fa7b8; box-shadow: 0 0 0 1px rgba(111, 167, 184, 0.35); }
+
+/* 試玩回饋：食材很難拿——架上的食材按鈕加大、數字鍵標得更清楚 */
+.stock { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.stock-btn { padding: 13px 14px; font-size: 16px; min-height: 48px; }
+.stock-btn .hot-key { font-size: .8em; opacity: 1; }
+.station-bg .modal.station { width: min(580px, 94vw); max-height: 76vh; }
+.storage-tabs .btn.small { padding: 7px 12px; font-size: 14px; }
+.monster-toggle { margin-top: 12px; }
+.prompt .digit-hint { color: #e9c98a; margin-right: 6px; white-space: nowrap; }

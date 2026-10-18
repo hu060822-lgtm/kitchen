@@ -54,6 +54,18 @@ export class ThreatDirector implements ThreatSystem {
     this.monster.onHide(role, w);
   }
 
+  stunMonster(x: number, z: number, w: ThreatWorld): boolean {
+    return this.monster.stun(x, z, w);
+  }
+
+  repelMonster(w: ThreatWorld): boolean {
+    return this.monster.repel(w);
+  }
+
+  disableMonster(): void {
+    this.monster.banish();
+  }
+
   debug() {
     return { monster: this.monster.debug(), guest: this.guest.debug() };
   }

@@ -43,7 +43,7 @@ const act = (action: string, label: string, args?: Record<string, unknown>, firs
 const panel = (label: string): QuickPlan => ({ kind: 'panel', label });
 const none = (label: string): QuickPlan => ({ kind: 'none', label });
 
-export function planQuick(mode: QuickMode, def: StationDef, s: QuickStation, me: QuickMe, openOrders: number): QuickPlan {
+export function planQuick(mode: QuickMode, def: StationDef, s: QuickStation, me: QuickMe, openOrders: number, ctx: { monsterIn?: boolean } = {}): QuickPlan {
   const h = me.held;
   const item = h?.kind === 'item' || me.other?.kind === 'item' || me.basket.length > 0;
   const plate = h?.kind === 'plate' || me.other?.kind === 'plate';
@@ -60,7 +60,11 @@ export function planQuick(mode: QuickMode, def: StationDef, s: QuickStation, me:
         if ((s.dirty?.plate ?? 0) + (s.dirty?.bowl ?? 0) > 0) return act('wash_dishes', '洗碗盤');
         break;
       case 'pan':
+        // 開著火、鍋裡有東西：翻面（關火按 1）
+        if (has && s.heat && s.heat !== 'OFF') return act('flip', '翻面');
+        return s.heat && s.heat !== 'OFF' ? act('heat', '關火', { level: 'OFF' }) : act('heat', '開中火', { level: 'MED' });
       case 'stove':
+        if ((has || (s.liquid ?? 0) > 0) && s.heat && s.heat !== 'OFF') return act('stir', '攪拌');
         return s.heat && s.heat !== 'OFF' ? act('heat', '關火', { level: 'OFF' }) : act('heat', '開中火', { level: 'MED' });
       case 'toaster':
         if (has && !s.toast) return act('start', '開始烤（3 段）', { level: 3 });
@@ -71,14 +75,14 @@ export function planQuick(mode: QuickMode, def: StationDef, s: QuickStation, me:
       case 'plating':
         return act('new_plate', '拿一個盤子', { vessel: 'plate' });
       case 'prep':
-        if (has) return panel('切（選切法）');
+        if (has) return act('quick_chop', '切（自動）');
         break;
       case 'oven':
-        return panel('設定溫度');
+        return s.heat && s.heat !== 'OFF' ? act('heat', '關烤箱', { level: 'OFF' }) : act('heat', '預熱 210°C', { level: 'MED' });
       case 'spice':
         return panel('量調味料');
       case 'cctv':
-        return panel('監視器');
+        return ctx.monsterIn ? act('flash', '緊急照明（逼退牠）') : act('back_door', '鎖後門');
       case 'fridge':
       case 'pantry':
         return panel('選食材');
@@ -131,9 +135,9 @@ export function planQuick(mode: QuickMode, def: StationDef, s: QuickStation, me:
     case 'delivery':
       return s.crate ? act('take_crate', '搬貨') : none('沒有貨');
     case 'spice':
-      return panel('量調味料');
+      return panel('量調味料（或按數字鍵）');
     case 'cctv':
-      return panel('監視器');
+      return act('fire_door', '關防火門');
   }
   return panel('打開');
 }

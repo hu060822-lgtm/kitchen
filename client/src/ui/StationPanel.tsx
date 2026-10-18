@@ -847,11 +847,14 @@ function Cctv({ k, run }: Ctx): JSX.Element {
         <Btn kind={closed ? '' : 'danger'} label="關上防火門，十五秒" disabled={closed || !ready} onClick={() => run('fire_door')}>
           {closed ? `防火門關著（${Math.ceil((k.fireDoor.closedUntil - k.t) / 1000)} 秒）` : ready ? '關上防火門（15 秒）' : `門禁冷卻中（${Math.ceil((k.fireDoor.readyAt - k.t) / 1000)} 秒）`}
         </Btn>
+        <Btn kind={m?.present && k.t >= (k.flashReadyAt ?? 0) ? 'danger' : ''} label="緊急照明：把牠逼回後門" disabled={!m?.present || k.t < (k.flashReadyAt ?? 0)} onClick={() => run('flash')}>
+          {k.t < (k.flashReadyAt ?? 0) ? `緊急照明充電中（${Math.ceil(((k.flashReadyAt ?? 0) - k.t) / 1000)} 秒）` : m?.present ? '緊急照明（逼退牠）' : '緊急照明（牠進來才有用）'}
+        </Btn>
       </div>
       <p className="legend">
         門禁兩個按鈕共用 45 秒冷卻。<b>鎖後門</b>：牠還沒進來時用，20 秒內進不來（但會越等越餓，門一開就進來）。
         <b>關防火門</b>：牠在後走廊或側走廊（畫面上看得到）時關門，牠會去撞門 2.5 秒然後放棄、這次就離開；牠已經在廚房裡時，關門只是擋住一條路。
-        牠進來前會在後門外刮門 6 秒，這時鎖後門就進不來；進來之後每次最多待 60 秒。
+        牠進來前會在後門外刮門 6 秒，這時鎖後門就進不來；進來之後每次最多待 40 秒。<b>緊急照明</b>：牠已經在裡面時打開，強光把牠逼回後門（90 秒充電）。也可以看著牠按 T 把手上的食材丟過去，砸中會讓牠愣住 3 秒。
       </p>
     </>
   );

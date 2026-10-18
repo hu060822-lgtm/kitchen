@@ -29,7 +29,7 @@ export const PLAYER_RADIUS = 0.33;
 /** 步行速度（m/s） */
 export const WALK_SPEED = 2.3;
 /** 客戶端互動距離（從工作站正面量起） */
-export const INTERACT_RANGE = 1.9;
+export const INTERACT_RANGE = 2.3;
 /** 伺服器接受的互動距離（含網路延遲容忍） */
 export const SERVER_INTERACT_RANGE = 2.8;
 /** 伺服器接受的最大移動速度（m/s，含容忍） */

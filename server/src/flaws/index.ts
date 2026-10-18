@@ -833,9 +833,12 @@ export class FlawSystem {
     st.cooldowns.tap = t + this.cfg.common.tapCooldownMs;
     target.tapped = { from: seat, token, at: t, x: p.x, z: p.z };
     if (target.flaw === 'D14' && target.sleepUntil > t) this.wake(to, target, seat);
-    else if (target.flaw === 'D14' && target.drowsy >= this.cfg.D14.heavyAt) {
-      // 快睡著時被拍一下：提神一點（不能無限重置）
-      target.drowsy = Math.max(this.cfg.D14.warnAt, target.drowsy - 10);
+    else if (target.flaw === 'D14' && target.drowsy > 0) {
+      // 拍一下：提神（每次 −25；同一個人拍有 4 秒冷卻）
+      const before = target.drowsy;
+      target.drowsy = Math.max(0, target.drowsy - (this.cfg.D14.tapRelief ?? 25));
+      if (target.drowsy < this.cfg.D14.warnAt) target.warned = 0;
+      this.sim.emit({ kind: 'flaw', text: `被拍了一下，清醒一點了（睡意 ${Math.round(before)} → ${Math.round(target.drowsy)}）。`, visual: 'wake' }, to);
     }
     this.log(seat, 'coop_ok', `拍 ${to} 的肩`);
     this.log(to, 'coop_ok', `被 ${seat} 拍肩`);
@@ -1063,7 +1066,7 @@ export class FlawSystem {
         if (h.kind === 'crate' || h.kind === 'dirty') return null;
         return { task: 'pedal', ms: this.cfg.D11.pedalMs };
       }
-      if (k === 'prep' && s.contaminated && (action === 'place' || action === 'chop_start' || action === 'peel')) {
+      if (k === 'prep' && s.contaminated && (action === 'place' || (action === 'chop_start' || action === 'quick_chop') || action === 'peel')) {
         return blocked('這塊砧板碰過生肉還沒擦——你不在上面做事。先擦乾淨（你擦得很快）。');
       }
     } else if (k === 'dishes' && action === 'tray') return warn('托盤是潔癖主廚的工具；你直接拿就好。');
@@ -1095,7 +1098,7 @@ export class FlawSystem {
     const st = this.seats.get(seat);
     if (st?.flaw === 'D14') this.workDrowsy(seat, st, def, action);
     // 有人把生菜放上沒擦的砧板：潔癖主廚提早收到警告
-    if (def.kind === 'prep' && (action === 'place' || action === 'chop_start')) {
+    if (def.kind === 'prep' && (action === 'place' || (action === 'chop_start' || action === 'quick_chop'))) {
       const s = this.sim.stations.get(def.id);
       if (s?.contaminated) {
         const h = this.sim.players[seat].held;

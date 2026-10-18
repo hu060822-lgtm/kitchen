@@ -351,6 +351,7 @@ export interface Target {
 export function currentTarget(role: Seat, guestAt: [number, number] | null = null): Target | null {
   const [fx, fz] = forwardOf(pose.yaw);
   let best: Target | null = null;
+  let bestScore = -Infinity;
   for (const s of STATIONS) {
     const [sx, sz] = stationFront(s, 0.5);
     const dist = Math.hypot(sx - pose.x, sz - pose.z);
@@ -359,7 +360,12 @@ export function currentTarget(role: Seat, guestAt: [number, number] | null = nul
     const vz = s.pos[1] - pose.z;
     const dot = (vx * fx + vz * fz) / (Math.hypot(vx, vz) || 1);
     if (dot < 0.5) continue;
-    if (!best || dist < best.dist) best = { station: s, guest: false, dist, usable: roleCanUseStation(role, s), align: dot };
+    // 準心對著的優先（兩個工作站並排時，選你看著的那一個），太遠的扣分
+    const score = dot * 2 - dist * 0.45;
+    if (score > bestScore) {
+      bestScore = score;
+      best = { station: s, guest: false, dist, usable: roleCanUseStation(role, s), align: dot };
+    }
   }
   if (guestAt) {
     const vx = guestAt[0] - pose.x;

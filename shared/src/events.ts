@@ -83,6 +83,8 @@ export interface ClientToServerEvents {
   /** 連續七晚：大廳裡選第幾晚（0＝單班）；start＝打烊後直接開始那一晚（只有房主） */
   /** 選今晚（night），或無盡模式（endless；打烊後 start＋next＝下一天，start 不帶 next＝重新開始一輪） */
   'room:night': (p: { night: number; start?: boolean; endless?: boolean; next?: boolean }, ack: (r: Ack) => void) => void;
+  /** 房主在大廳切換「沒有怪物」 */
+  'room:options': (p: { noMonster: boolean }, ack: (r: Ack) => void) => void;
   'room:tutorial': (p: { name: string }, ack: (r: Ack<SessionInfo & { sync: FullSync }>) => void) => void;
   'room:join': (p: JoinPayload, ack: (r: Ack<SessionInfo & { sync: FullSync }>) => void) => void;
   'room:rejoin': (p: RejoinPayload, ack: (r: Ack<{ sync: FullSync; playerId: string }>) => void) => void;

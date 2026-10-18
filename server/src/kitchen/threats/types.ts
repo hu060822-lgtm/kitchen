@@ -40,4 +40,9 @@ export interface ThreatSystem {
   debug(): { monster: Record<string, unknown> | null; guest: Record<string, unknown> | null };
   /** 開發者工具：立刻召喚／關閉 */
   command(cmd: 'spawn_guest' | 'guest_off' | 'spawn_monster' | 'monster_off', t: number): void;
+  /** 反制（入侵後）：丟中牠會愣住、緊急照明把牠逼走 */
+  stunMonster?(x: number, z: number, w: ThreatWorld): boolean;
+  repelMonster?(w: ThreatWorld): boolean;
+  /** 這一班沒有怪物 */
+  disableMonster?(): void;
 }

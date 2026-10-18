@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { FLAW_CARDS, FLAW_IDS, MAX_PLAYERS, type FlawId } from '@last-table/shared';
 import { audio } from '../audio/engine';
-import { leaveRoom, selectFlaw, setEndless, setNight, startGame } from '../net/socket';
+import { leaveRoom, selectFlaw, setEndless, setNight, setNoMonster, startGame } from '../net/socket';
 import { NIGHT_COUNT, nightDef } from '@last-table/shared';
 import { useCampaign } from '../state/campaign';
 import { useStore } from '../state/store';
@@ -229,6 +229,10 @@ function NightPicker(): JSX.Element | null {
         ) : (
           <p className="note">{endless ? '房主選了無盡模式。' : cur ? `房主選了第 ${cur} 晚「${def?.title}」。` : '房主選了單班。'}</p>
         )}
+        <label className="row sm monster-toggle">
+          <input type="checkbox" checked={!!room.noMonster} disabled={!me.isHost} onChange={(e) => void setNoMonster(e.target.checked).then((x) => x && setErr(x))} />
+          沒有怪物（後門外的東西不會出現；那位客人照常）{!me.isHost && '・房主決定'}
+        </label>
         {err && <p className="err">{err}</p>}
       </div>
     </section>

@@ -256,7 +256,14 @@ export class Physics {
     if (!it) return warn('手上沒有東西可以丟。');
     let target: Seat | null = null;
     let land: [number, number];
-    if (to && to !== role && SEATS.includes(to)) {
+    const m = this.sim.threats?.public(this.sim).monster;
+    if ((to as string) === 'monster') {
+      // 反制：朝後門的東西丟過去（砸中會愣住幾秒）
+      if (!m?.present) return warn('牠不在這裡。');
+      const d = Math.hypot(m.x - pose.x, m.z - pose.z);
+      if (d > PHYSICS.toss.range) return warn(`太遠了（最遠 ${PHYSICS.toss.range} 公尺）。`);
+      land = [m.x, m.z];
+    } else if (to && to !== role && SEATS.includes(to)) {
       const tp = this.sim.pose(to);
       if (!tp?.connected || this.sim.players[to].status !== 'ok') return warn('他現在接不了。');
       const d = Math.hypot(tp.x - pose.x, tp.z - pose.z);
@@ -313,7 +320,9 @@ export class Physics {
       return;
     }
     const it = f.held.kind === 'item' ? this.sim.items.get(f.held.id) : undefined;
-    this.sim.flaws.floorPut(f.held, f.to[0], f.to[1], f.byRole, f.what, it && INGREDIENTS[it.type] ? '丟到地上' : '掉了');
+    // 落點旁邊就是後門的東西：砸中，牠愣住幾秒
+    const hit = this.sim.threats?.stunMonster?.(f.to[0], f.to[1], this.sim) ?? false;
+    this.sim.flaws.floorPut(f.held, f.to[0], f.to[1], f.byRole, f.what, hit ? '砸中牠之後掉在地上' : it && INGREDIENTS[it.type] ? '丟到地上' : '掉了');
   }
 
   /* ------------------------------ 公開狀態 ------------------------------ */

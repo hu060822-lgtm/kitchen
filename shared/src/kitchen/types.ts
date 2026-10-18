@@ -72,7 +72,7 @@ export interface StationPublic {
   hidden?: boolean;
 }
 
-export type TaskKind = 'wash' | 'peel' | 'wipe' | 'probe' | 'rescue' | 'escort' | 'verify' | 'clamp' | 'glove' | 'tray' | 'pedal' | 'dishes' | 'stool' | 'peek' | 'splash' | 'struggle' | 'mix' | 'mop';
+export type TaskKind = 'wash' | 'peel' | 'wipe' | 'probe' | 'rescue' | 'escort' | 'verify' | 'clamp' | 'glove' | 'tray' | 'pedal' | 'dishes' | 'stool' | 'peek' | 'splash' | 'struggle' | 'mix' | 'mop' | 'chop';
 /** 計時動作的名稱（伺服器訊息與介面共用） */
 export const TASK_TEXT: Record<TaskKind, string> = {
   wash: '清洗',
@@ -93,6 +93,7 @@ export const TASK_TEXT: Record<TaskKind, string> = {
   splash: '洗把臉',
   mix: '攪拌',
   mop: '擦乾地上的水',
+  chop: '切',
 };
 
 export interface TaskPublic {
@@ -228,6 +229,8 @@ export interface MonsterPublic {
   warnLeft?: number | null;
   /** 後門外的動靜（0–1，越接近 1 越快進來；監視器上看得到） */
   restless: number;
+  /** 被丟中愣住：還有幾毫秒 */
+  stunLeft?: number | null;
 }
 
 export interface ThreatsPublic {
@@ -251,6 +254,8 @@ export interface KitchenPublic {
   phase: ShiftPhase;
   /** 簡單的物理：積水、飛行中的東西 */
   physics?: PhysicsPublic;
+  /** 緊急照明下一次可以用的時間（班次時間） */
+  flashReadyAt?: number;
   /** 班次開始後的毫秒數（伺服器時鐘） */
   t: number;
   prepMs: number;

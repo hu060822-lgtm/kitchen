@@ -718,7 +718,8 @@ export function ThreatList(): JSX.Element {
       <li>後門的東西：廚房越吵（切菜、鍋鏟碰撞、跑步、回聲），牠越快來。進來前會在後門外<b>刮門 6 秒</b>——這時到監視器<b>鎖上後門</b>，牠就進不來。</li>
       <li>進來之後，牠追<b>最近的人</b>（隔著牆也知道你在哪），每 20 秒換追另一個人。躲進置物櫃、跑進餐廳（牠不進餐廳）可以甩掉牠；跑步比牠快。</li>
       <li>被抓到會被拖進冷藏室的鐵籠（手上的東西還在）：隊友撬開 2.5 秒；也可以自己按 <kbd>{K('interact')}</kbd> 搖開鐵籠——沒有隊友能救時 7 秒、有隊友時 18 秒，而且很吵，怪物可能會回來。</li>
-      <li>牠每次最多待 <b>60 秒</b>，畫面上方看得到還剩幾秒；快到時會低吼，然後從後門離開。</li>
+      <li>牠每次最多待 <b>40 秒</b>，畫面上方看得到還剩幾秒；快到時會低吼，然後從後門離開。</li>
+      <li><b>反制</b>：看著牠按 <kbd>T</kbd> 把手上的食材丟過去，砸中會讓牠愣住 3 秒；到監視器按 <kbd>3</kbd>（或右鍵）打開緊急照明，強光把牠逼回後門（90 秒充電）。不想要怪物，可以在大廳勾「沒有怪物」。</li>
       <li>監視器的門禁（兩個共用 45 秒冷卻）：<b>鎖後門</b>＝牠還沒進來（包括刮門的 6 秒）時擋 20 秒；<b>關防火門</b>＝牠在後走廊或側走廊時關，牠撞門 2.5 秒後放棄離開。</li>
       <li>躲進置物櫃也能擋住牠；牠不會進餐廳。</li>
       <li>它們只會打斷你的工作，不會改變料理的規則。</li>
@@ -733,8 +734,17 @@ export function DisplaySettings(): JSX.Element {
     <>
       <label className="slider">
         介面大小
-        <input type="range" min={0.7} max={1.2} step={0.05} value={prefs.uiScale ?? 0.85} onChange={(e) => useStore.getState().setPrefs({ uiScale: Number(e.target.value) })} />
-        <span>{Math.round((prefs.uiScale ?? 0.85) * 100)}%</span>
+        <input type="range" min={0.8} max={1.6} step={0.05} value={prefs.uiScale ?? 1.1} onChange={(e) => useStore.getState().setPrefs({ uiScale: Number(e.target.value) })} />
+        <span>{Math.round((prefs.uiScale ?? 1.1) * 100)}%</span>
+      </label>
+      <label className="slider">
+        畫面亮度
+        <input type="range" min={0.8} max={1.8} step={0.05} value={prefs.brightness ?? 1.2} onChange={(e) => useStore.getState().setPrefs({ brightness: Number(e.target.value) })} />
+        <span>{Math.round((prefs.brightness ?? 1.2) * 100)}%</span>
+      </label>
+      <label className="row sm">
+        <input type="checkbox" checked={prefs.flicker ?? true} onChange={(e) => useStore.getState().setPrefs({ flicker: e.target.checked })} />
+        燈光閃爍（怪物靠近、停電時；關掉後改用畫面上方的文字提示）
       </label>
       <label className="slider">
         滑鼠靈敏度

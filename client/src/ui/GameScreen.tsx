@@ -29,7 +29,8 @@ function Fx(): JSX.Element | null {
   useEffect(
     () =>
       on('fx', (f) => {
-        if (['shift', 'charge', 'lunge', 'flicker', 'tap', 'thermal', 'handoff', 'grab', 'shake', 'rally', 'sleep'].includes(f.visual)) setFx((p) => ({ k: (p?.k ?? 0) + 1, v: f.visual }));
+        if (f.visual === 'flicker' && !(useStore.getState().prefs.flicker ?? true)) return;
+        if (['flash', 'shift', 'charge', 'lunge', 'flicker', 'tap', 'thermal', 'handoff', 'grab', 'shake', 'rally', 'sleep'].includes(f.visual)) setFx((p) => ({ k: (p?.k ?? 0) + 1, v: f.visual }));
       }),
     [],
   );
@@ -135,7 +136,7 @@ export default function GameScreen(): JSX.Element | null {
   if (!role) return null;
 
   return (
-    <div className="game" ref={ref} style={{ ['--hud-scale' as string]: prefs.uiScale ?? 0.85 } as React.CSSProperties}>
+    <div className="game" ref={ref} style={{ ['--hud-scale' as string]: prefs.uiScale ?? 1.1 } as React.CSSProperties}>
       <Suspense fallback={<div className="blind-view"><div className="whisper">正在點亮廚房…</div></div>}>
         <div style={{ position: 'absolute', inset: 0 }} onClick={() => !panel && requestLock()}>
           <Scene />

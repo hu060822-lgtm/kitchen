@@ -304,13 +304,17 @@ async function main(): Promise<void> {
   await P.mouse.up({ button: 'left' });
   await P.waitForFunction(() => (window as unknown as Win).__NP__.useStore.getState().kitchen.stations.pan_a.items.length === 1, undefined, { polling: 200, timeout: 8000 });
   check(!(await P.$('.modal.station')), '按左鍵：番茄下鍋，沒有打開面板');
+  // 開著火、鍋裡有東西：右鍵翻面；數字鍵 1 關火
   await P.mouse.down({ button: 'right' });
   await P.mouse.up({ button: 'right' });
+  await P.waitForTimeout(500);
+  check((await pan()).heat === 'MED', '開著火時右鍵是翻面（火力不變）');
+  await P.keyboard.press('Digit1');
   await P.waitForFunction(() => (window as unknown as Win).__NP__.useStore.getState().kitchen.stations.pan_a.heat === 'OFF', undefined, { polling: 200, timeout: 8000 });
   await P.mouse.down({ button: 'left' });
   await P.mouse.up({ button: 'left' });
-  await P.waitForTimeout(600);
-  check((await pan()).items.length === 0 && (await pan()).heat === 'OFF', '右鍵關火、左鍵拿起來');
+  await P.waitForFunction(() => (window as unknown as Win).__NP__.useStore.getState().kitchen.stations.pan_a.items.length === 0, undefined, { polling: 200, timeout: 8000 }).catch(() => undefined);
+  check((await pan()).items.length === 0 && (await pan()).heat === 'OFF', '看著平底鍋按 1 關火（不用開面板）、左鍵拿起來');
   // 面板裡的按鈕標上數字鍵
   await openHere(P);
   const keys = await P.$$eval('.modal.station .body button[data-key]', (bs) => bs.length);

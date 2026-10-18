@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { BASKET_SLOTS, CUT_LABEL, MIX_LABEL, INGREDIENTS, SEASONINGS, TASK_TEXT, isTwoHanded, type Held, TOKEN_COLOR, TOKEN_LABEL, ZONES, flawSpeedMultiplier, type KitchenPublic, type Seat, type SignalToken, type StationDef } from '@last-table/shared';
+import { BASKET_SLOTS, CUT_LABEL, MIX_LABEL, INGREDIENTS, SEASONINGS, SEASONING_IDS, TASK_TEXT, isTwoHanded, type Held, TOKEN_COLOR, TOKEN_LABEL, ZONES, flawSpeedMultiplier, type KitchenPublic, type Seat, type SignalToken, type StationDef } from '@last-table/shared';
 import { currentTarget, currentZone, pose } from '../game/controller';
-import { mateTarget, nearbyFloor, nearbyPuddle, preferMate, quickPlanFor, requestLock, storageIds, tossTarget } from '../game/loop';
+import { mateTarget, monsterAimed, nearbyFloor, nearbyPuddle, preferMate, quickPlanFor, requestLock, storageIds, tossTarget } from '../game/loop';
 import { currentTab, tabLabel, useStorageTab } from '../game/storageTabs';
 import { keyLabel, useKeymap } from '../game/keymap';
 import { forceStart, readyUp } from '../net/socket';
@@ -108,10 +108,17 @@ function PhysicsPrompts({ k, role }: { k: KitchenPublic | null; role: Seat }): J
   if (!k || (k.players[role]?.status ?? 'ok') !== 'ok') return null;
   const held = k.players[role]?.held;
   const toss = held?.kind === 'item' ? tossTarget() : null;
+  const atMonster = held?.kind === 'item' && !toss ? monsterAimed() : null;
   const pud = nearbyFloor() ? null : nearbyPuddle();
-  if (!toss && !pud) return null;
+  if (!toss && !pud && atMonster === null) return null;
   return (
     <div className="physics-prompts">
+      {atMonster !== null && (
+        <div className="prompt plate wet">
+          <kbd>{keyLabel('toss')}</kbd>
+          <span>丟向牠（砸中會愣住 3 秒）</span>
+        </div>
+      )}
       {toss && (
         <div className="prompt plate">
           <kbd>{keyLabel('toss')}</kbd>
@@ -130,6 +137,16 @@ function PhysicsPrompts({ k, role }: { k: KitchenPublic | null; role: Seat }): J
   );
 }
 
+/** 看著這種工作站時，數字鍵可以直接做什麼 */
+const DIGIT_HINTS: Partial<Record<string, string>> = {
+  pan: '1 關火 2 小 3 中 4 大',
+  stove: '1 關火 2 小 3 中 4 大',
+  oven: '1 關 2 低 3 中 4 高',
+  toaster: '1–5 段數開始烤',
+  spice: `${SEASONING_IDS.map((id, i) => `${i + 1} ${SEASONINGS[id].label}`).join(' ')}（Shift 量 1）`,
+  cctv: '1 防火門 2 鎖後門 3 緊急照明',
+};
+
 /** 準星旁的滑鼠提示：左鍵會做什麼、右鍵會做什麼（不能做的不顯示） */
 function MouseHints({ role, def }: { role: Seat; def: StationDef }): JSX.Element | null {
   const a = quickPlanFor('primary', role, def);
@@ -137,9 +154,11 @@ function MouseHints({ role, def }: { role: Seat; def: StationDef }): JSX.Element
   const show = (p: typeof a): string | null => (p && p.kind !== 'none' ? p.label : null);
   const l = show(a);
   const r = show(b);
-  if (!l && !r) return null;
+  const keys = DIGIT_HINTS[def.kind];
+  if (!l && !r && !keys) return null;
   return (
     <span className="xs mouse-hints">
+      {keys && <span className="digit-hint">{keys}</span>}
       {l && (
         <span>
           <kbd className="mouse">左鍵</kbd>
@@ -600,7 +619,11 @@ function ThreatStatus(): JSX.Element | null {
     const left = m.kitchenLeft !== null ? Math.ceil(m.kitchenLeft / 1000) : null;
     if (m.mode === 'leave') lines.push({ key: 'm', text: '後門的東西正在離開', tone: 'calm' });
     else if (m.mode === 'bang') lines.push({ key: 'm', text: '牠在防火門外撞門：撞完就會放棄', tone: 'warn' });
-    else lines.push({ key: 'm', text: `後門的東西在追最近的人：再 ${left ?? 60} 秒離開`, tone: (left ?? 60) <= 5 ? 'calm' : 'danger' });
+    else if (m.stunLeft) lines.push({ key: 'm', text: `砸中了：牠愣住了（${Math.ceil(m.stunLeft / 1000)} 秒）——快跑`, tone: 'warn' });
+    else {
+      const flashOk = k.t >= (k.flashReadyAt ?? 0);
+      lines.push({ key: 'm', text: `後門的東西在追最近的人：再 ${left ?? 40} 秒離開${flashOk ? '（監視器按 3 緊急照明逼退牠；看著牠按 T 丟東西）' : '（看著牠按 T 丟東西砸牠）'}`, tone: (left ?? 40) <= 5 ? 'calm' : 'danger' });
+    }
   }
   if (!k.doors.fire) lines.push({ key: 'f', text: `防火門關著：${Math.max(0, Math.ceil((k.fireDoor.closedUntil - k.t) / 1000))} 秒`, tone: 'info' });
   if (k.backDoor && k.t < k.backDoor.closedUntil) lines.push({ key: 'b', text: `後門鎖著：${Math.ceil((k.backDoor.closedUntil - k.t) / 1000)} 秒`, tone: 'info' });

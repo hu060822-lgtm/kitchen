@@ -83,14 +83,28 @@ export interface Prefs {
   beacon: boolean;
   /** 背景音樂音量（0–1） */
   musicVolume: number;
+  /** 畫面亮度（曝光倍率，0.8–1.8） */
+  brightness: number;
+  /** 燈光閃爍（怪物靠近、事件時的閃燈效果） */
+  flicker: boolean;
+  /** 設定的版本（舊版的預設值要換成新的） */
+  prefsVersion?: number;
 }
 
 const PREFS_KEY = 'last-table.prefs';
 function loadPrefs(): Prefs {
-  const def: Prefs = { volume: 0.8, sensitivity: 1, speech: false, retro: false, uiScale: 0.85, mono: false, envVolume: 1, echoVolume: 1, navVolume: 1, voiceVolume: 1, beacon: false, musicVolume: 0.5 };
+  const def: Prefs = { volume: 0.8, sensitivity: 1, speech: false, retro: false, uiScale: 1.1, mono: false, envVolume: 1, echoVolume: 1, navVolume: 1, voiceVolume: 1, beacon: false, musicVolume: 0.5, brightness: 1.2, flicker: true, prefsVersion: 2 };
   try {
     const raw = kv.get(PREFS_KEY);
-    if (raw) return { ...def, ...(JSON.parse(raw) as Partial<Prefs>) };
+    if (raw) {
+      const p = { ...def, ...(JSON.parse(raw) as Partial<Prefs>) };
+      // 第二版：介面預設放大（試玩回饋：字太小）；舊的預設 0.85 換成新的
+      if ((p.prefsVersion ?? 1) < 2) {
+        p.uiScale = Math.max(p.uiScale ?? 0, def.uiScale);
+        p.prefsVersion = 2;
+      }
+      return p;
+    }
   } catch {
     /* 瀏覽器可能封鎖儲存空間 */
   }

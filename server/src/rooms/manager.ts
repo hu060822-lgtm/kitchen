@@ -256,6 +256,14 @@ export class RoomManager {
       const e = c.room.setNight(n);
       reply(ack, e ? fail(e) : { ok: true });
     }));
+    socket.on('room:options', guard((p, ack) => {
+      const c = this.ctx(socket);
+      if (!c) return reply(ack, fail('你不在房間裡。'));
+      if (c.room.hostId !== c.player.id) return reply(ack, fail('只有房主可以選。'));
+      if (c.room.phase !== 'LOBBY') return reply(ack, fail('開班之後不能換。'));
+      const e = c.room.setNoMonster(!!(p as { noMonster?: unknown } | undefined)?.noMonster);
+      reply(ack, e ? fail(e) : { ok: true });
+    }));
     socket.on('room:tutorial', guard((p, ack) => typeof p === 'function' ? this.onTutorial(socket, { name: '' }, p) : this.onTutorial(socket, p, ack)));
     socket.on('room:join', guard((p, ack) => typeof p === 'function' ? this.onJoin(socket, undefined as never, p) : this.onJoin(socket, p, ack)));
     socket.on('room:rejoin', guard((p, ack) => typeof p === 'function' ? this.onRejoin(socket, undefined as never, p) : this.onRejoin(socket, p, ack)));

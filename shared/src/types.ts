@@ -38,6 +38,8 @@ export interface RoomPublic {
   night?: number;
   /** 無盡模式：第幾天、這一輪的種子（用戶端用 endlessDay() 算出今天的考驗） */
   endless?: { day: number; seed: number };
+  /** 沒有怪物的模式（那位客人照常） */
+  noMonster?: boolean;
 }
 
 export interface PlayerPose {

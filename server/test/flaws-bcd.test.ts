@@ -637,7 +637,7 @@ describe('D14 嗜睡學徒', () => {
     expect(coopPub(b).drowsy[0]).toMatchObject({ seat: 'P1', state: 'asleep' });
     b.run(5.1);
     expect(privateOf(b, 'P1').drowsy!.state).not.toBe('asleep');
-    expect(privateOf(b, 'P1').drowsy!.level).toBe(35);
+    expect(privateOf(b, 'P1').drowsy!.level).toBe(DEFAULT_FLAW_CONFIG.D14.wakeTo);
   });
 
   it('互助：隊友拍肩直接叫醒；自救：洗把臉 −40（45 秒冷卻）', () => {

@@ -122,6 +122,8 @@ export interface RoomSaveState {
   /** 無盡模式的第幾天（0／省略＝不是無盡模式）與這一輪的種子 */
   endless?: number;
   endlessSeed?: number;
+  /** 沒有怪物的模式 */
+  noMonster?: boolean;
   players: Array<Pick<PlayerRec, 'id' | 'token' | 'name' | 'role' | 'flaw' | 'pose' | 'body'>>;
 }
 
@@ -295,6 +297,7 @@ export class Room {
     if (this.opts.tutorial) out.tutorial = true;
     if (this.night) out.night = this.night;
     if (this.endless) out.endless = { day: this.endless, seed: this.endlessSeed };
+    if (this.noMonster) out.noMonster = true;
     return out;
   }
 
@@ -439,6 +442,7 @@ export class Room {
     this.sim = this.createSim(seats.sort(), flaws);
     if (this.opts.threats) this.sim.threats = createThreats();
     this.applyNight(this.sim);
+    if (this.noMonster) this.sim.threats?.disableMonster?.();
     if (this.opts.tutorial) {
       this.sim.tutorial = new Tutorial();
       this.sim.tutorial.begin(this.sim);
@@ -462,6 +466,16 @@ export class Room {
     if (!Number.isInteger(n) || n < 0 || n > NIGHT_COUNT) return '沒有這一晚。';
     this.night = n;
     this.endless = 0;
+    this.emitRoomState();
+    return null;
+  }
+
+  /** 沒有怪物的模式（大廳裡房主選；那位客人照常） */
+  noMonster = false;
+
+  setNoMonster(v: boolean): string | null {
+    if (this.tutorial) return '教學關不能選。';
+    this.noMonster = v;
     this.emitRoomState();
     return null;
   }
@@ -586,6 +600,7 @@ export class Room {
       night: this.night,
       endless: this.endless,
       endlessSeed: this.endlessSeed,
+      noMonster: this.noMonster,
       players: [...this.players.values()].map((p) => ({ id: p.id, token: p.token, name: p.name, role: p.role, flaw: p.flaw, pose: { ...p.pose }, body: { ...p.body } })),
     };
     return { room, sim: snapshot(this.sim, { skip: SIM_SKIP }) };
@@ -634,9 +649,11 @@ export class Room {
     this.night = Number.isInteger(r.night) && r.night! >= 0 && r.night! <= NIGHT_COUNT ? r.night! : 0;
     this.endless = Number.isInteger(r.endless) && r.endless! > 0 ? r.endless! : 0;
     this.endlessSeed = Number.isInteger(r.endlessSeed) ? r.endlessSeed! : 0;
+    this.noMonster = !!r.noMonster;
     const sim = this.createSim(seats.sort(), flaws);
     if (this.opts.threats) sim.threats = createThreats();
     this.applyNight(sim);
+    if (this.noMonster) sim.threats?.disableMonster?.();
     restore(sim, state.sim, { skip: SIM_SKIP });
     this.sim = sim;
     this.colliderCache.clear();

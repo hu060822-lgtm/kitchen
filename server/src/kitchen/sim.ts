@@ -251,7 +251,10 @@ const TASK_MS: Record<TaskKind, number> = {
   splash: 2000,
   mix: 2500,
   mop: 2200,
+  chop: 2500,
 };
+/** 一鍵切的一致性（照節奏切可以更高） */
+export const QUICK_CHOP_QUALITY = 0.8;
 export const TASK_LABEL = TASK_TEXT;
 /** 客人吃完、髒盤送回回收窗口要多久（與餐廳裡客人吃飯的時間一致） */
 export const DISH_RETURN_MS = 25_000;
@@ -291,6 +294,8 @@ export class KitchenSim {
   fireDoor = { closedUntil: 0, readyAt: 0 };
   /** 後門的鎖（監視器）：鎖著時後門外的東西進不來；和防火門共用冷卻 */
   backDoor = { closedUntil: 0 };
+  /** 緊急照明（入侵後的反制）：下一次可以用的時間 */
+  flashReadyAt = 0;
   get backClosed(): boolean {
     return this.t < this.backDoor.closedUntil;
   }
@@ -599,7 +604,7 @@ export class KitchenSim {
   private quick(role: Seat, def: StationDef, s: StationRT, p: KitchenActionPayload, mode: QuickMode): KitchenActionResult {
     const pl = this.players[role];
     const open = this.orders.filter((o) => o.status === 'open');
-    const plan = planQuick(mode, def, s, { held: pl.held, other: pl.other, basket: pl.basket, status: pl.status }, open.length);
+    const plan = planQuick(mode, def, s, { held: pl.held, other: pl.other, basket: pl.basket, status: pl.status }, open.length, { monsterIn: !!this.threats?.public(this).monster?.present });
     if (plan.kind === 'none') return warn(`${plan.label}。`);
     if (plan.kind === 'panel') return info(`${plan.label}：按 E 打開${def.label}。`);
     let args = plan.args ?? {};
@@ -1078,6 +1083,12 @@ export class KitchenSim {
         return s ? this.finishMix(role, s) : null;
       case 'mop':
         return task.arg && this.physics.removePuddle(task.arg) ? '地上擦乾了。' : null;
+      case 'chop': {
+        const [id, cut] = (task.arg ?? '').split('|') as [string, Cut];
+        const it = this.items.get(id);
+        if (!s || !it || !s.items.includes(id) || it.cut !== 'WHOLE') return null;
+        return this.applyCut(role, s, it, cut, QUICK_CHOP_QUALITY);
+      }
       case 'dishes': {
         if (!s) return null;
         const n = s.dirty.plate + s.dirty.bowl;
@@ -1281,6 +1292,21 @@ export class KitchenSim {
         s.chop = { role, cut, startedAt: this.t, need };
         return info(`開始${CUT_LABEL[cut]}：照著節奏下刀 ${need} 次。`, { need });
       }
+      case 'quick_chop': {
+        // 一鍵切（右鍵）：用這份食材最常用的切法，自動切完（一致性固定 80%；想更整齊就打開面板照節奏切）
+        if (!it) return warn('砧板上沒有東西。');
+        const def = INGREDIENTS[it.type];
+        if (it.cut !== 'WHOLE') return warn(`已經${CUT_LABEL[it.cut]}過了。`);
+        const cut = (typeof args.cut === 'string' ? (args.cut as Cut) : null) ?? this.defaultCut(it);
+        if (!cut || !def.cuts.includes(cut) || cut === 'WHOLE') return warn(`${def.label}不用切。`);
+        if (def.needsPeel && !it.peeled) return warn(`${def.label}要先削皮（按 E 打開備料台）。`);
+        if (cut === 'BEATEN') {
+          const hands = this.flaws.twoHanded(role, s.def.id, '打蛋');
+          if (hands) return hands;
+        }
+        const need = this.flaws.chopStrokes(role, cut, CUT_STROKES[cut]);
+        return this.startTask(role, 'chop', s.def.id, `${it.id}|${cut}`, 600 + need * 220);
+      }
       case 'chop': {
         if (!it || !s.chop || s.chop.role !== role) return warn('先選切法。');
         const presses = Array.isArray(args.presses) ? (args.presses as unknown[]).filter((v): v is number => typeof v === 'number' && Number.isFinite(v)) : [];
@@ -1291,21 +1317,41 @@ export class KitchenSim {
         const q = cutQuality(presses.slice(0, need + 2));
         const cut = s.chop.cut;
         s.chop = null;
-        it.cut = cut;
-        it.cutQuality = q;
-        this.log(it, `chop:${cut}`, role, s.def.id, `一致性 ${Math.round(q * 100)}%`);
-        const def = INGREDIENTS[it.type];
-        if (def.contaminates && it.doneness < 0.05) s.contaminated = true;
-        else if (s.contaminated && !isRawProtein(def)) {
-          it.contaminated = true;
-          this.log(it, 'contaminated', role, s.def.id);
-        }
-        this.noise(s.def.pos[0], s.def.pos[1], NOISE.chop, 'chop');
-        this.flaws.onPrepWork(role);
-        return ok(`${def.label}${CUT_LABEL[cut]}完成（一致性 ${Math.round(q * 100)}%）。`);
+        return ok(this.applyCut(role, s, it, cut, q));
       }
     }
     return warn('沒有這個動作。');
+  }
+
+  /** 切好：記錄切法與一致性、砧板汙染、切菜聲 */
+  private applyCut(role: Seat, s: StationRT, it: ItemState, cut: Cut, q: number): string {
+    it.cut = cut;
+    it.cutQuality = q;
+    this.log(it, `chop:${cut}`, role, s.def.id, `一致性 ${Math.round(q * 100)}%`);
+    const def = INGREDIENTS[it.type];
+    if (def.contaminates && it.doneness < 0.05) s.contaminated = true;
+    else if (s.contaminated && !isRawProtein(def)) {
+      it.contaminated = true;
+      this.log(it, 'contaminated', role, s.def.id);
+    }
+    this.noise(s.def.pos[0], s.def.pos[1], NOISE.chop, 'chop');
+    this.flaws.onPrepWork(role);
+    return `${def.label}${CUT_LABEL[cut]}完成（一致性 ${Math.round(q * 100)}%）。`;
+  }
+
+  /** 一鍵切的切法：現在的單裡這份食材要的切法；沒有就用菜單裡的；再沒有就用最常見的 */
+  defaultCut(it: Pick<ItemState, 'type'>): Cut | null {
+    const def = INGREDIENTS[it.type];
+    const ok = (c: Cut | undefined): c is Cut => !!c && c !== 'WHOLE' && def.cuts.includes(c);
+    const fromRecipes = (ids: string[]): Cut | null => {
+      for (const id of ids) for (const c of RECIPES[id]?.components ?? []) if (c.type === it.type && ok(c.cut)) return c.cut;
+      return null;
+    };
+    const open = this.orders.filter((o) => o.status === 'open' && o.plan.recipeId).map((o) => o.plan.recipeId!);
+    const pick = fromRecipes(open) ?? fromRecipes(this.menu);
+    if (pick) return pick;
+    for (const c of ['DICED', 'SLICED', 'CHOPPED', 'SHRED', 'CHUNK', 'MINCED', 'BEATEN'] as Cut[]) if (ok(c)) return c;
+    return def.cuts.find((c) => c !== 'WHOLE') ?? null;
   }
 
   /* ---------------------------- 爐台（平底鍋、湯鍋） ---------------------------- */
@@ -1843,6 +1889,12 @@ export class KitchenSim {
       this.hooks.event({ kind: 'fire_door', text: '防火門關上了（15 秒）：牠在後走廊、側走廊的話，會被擋回去。', sound: 'door_slam', at: [7.95, 19.15] }, 'all');
       return ok('關上防火門（15 秒）。');
     }
+    if (action === 'flash') {
+      if (this.t < this.flashReadyAt) return warn(`緊急照明還在充電（${Math.ceil((this.flashReadyAt - this.t) / 1000)} 秒）。`);
+      if (!this.threats?.repelMonster?.(this)) return info('牠不在裡面：緊急照明留到牠進來再用。');
+      this.flashReadyAt = this.t + 90_000;
+      return ok('打開緊急照明：牠退回後門了（90 秒後才能再用）。');
+    }
     if (action === 'back_door') {
       if (this.opts.backLockBroken) return warn('後門的鎖今天壞了：只能用防火門擋，或躲進置物櫃。');
       const m = this.threats?.public(this).monster;
@@ -2029,6 +2081,7 @@ export class KitchenSim {
       physics: this.physics.public(),
       fireDoor: { ...this.fireDoor },
       backDoor: { ...this.backDoor },
+      flashReadyAt: this.flashReadyAt,
       threats: this.threats?.public(this) ?? { guest: null, monster: null, cctv: !!this.cctvBy },
       stats: { ...this.stats },
       coop: this.flaws.public(),
