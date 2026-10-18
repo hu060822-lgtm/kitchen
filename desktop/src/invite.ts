@@ -139,12 +139,14 @@ export class Invite {
       if (v.ok) {
         const j = (await v.json().catch(() => ({}))) as { game?: string; relay?: boolean };
         if (j.game === 'last-table' && j.relay === false) return `${base} 是房主模式的伺服器，不是線上伺服器。請到「設定 → 連線」改成你的 Render 網址。`;
+        // 新版、有查詢處：剛才的 404 多半是 Render 正在部署（舊的那一台還在回應）或剛醒來
+        if (j.game === 'last-table') return `線上伺服器（${base}）正在更新或剛醒來，稍後會自動再試；也可以按「重試」。`;
       }
       const h = await this.fetcher(`${base}/healthz`);
       const j = (await h.json().catch(() => null)) as { ok?: boolean } | null;
       if (h.ok && j?.ok) return `線上伺服器（${base}）還是舊版，沒有「房間代碼查詢處」。請把最新的原始碼推上 GitHub，等 Render 重新部署完成。`;
     } catch {
-      /* 連不上：當成網址不對 */
+      return `暫時連不上 ${base}（免費方案剛醒來時比較慢），稍後會自動再試。`;
     }
     return `${base} 不是《最後一桌》的線上伺服器（HTTP 404）。請到「設定 → 連線」填入你在 Render 上的網址。`;
   }

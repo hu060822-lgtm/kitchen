@@ -381,10 +381,12 @@ class AudioEngine {
 
   /* ----------------------------- 遊戲音效 ----------------------------- */
 
-  footstep(pos: Pos = null, running = false, at = 0): void {
-    const j = 0.85 + Math.random() * 0.3;
-    this.noise(0.07, { freq: 900 * j, q: 0.8, gain: pos ? 0.22 : 0.1, pos, at });
-    this.tone(95 * j, 0.09, { type: 'sine', gain: pos ? 0.18 : 0.1, pos, at });
+  /** size：體型（巨人的腳步又重又低沉，小矮人的又輕又高） */
+  footstep(pos: Pos = null, running = false, at = 0, size = 1): void {
+    const j = (0.85 + Math.random() * 0.3) / size;
+    const g = Math.sqrt(size);
+    this.noise(0.07 * size, { freq: 900 * j, q: 0.8, gain: (pos ? 0.22 : 0.1) * g, pos, at });
+    this.tone(95 * j, 0.09 * size, { type: 'sine', gain: (pos ? 0.18 : 0.1) * g * g, pos, at });
     if (running) this.noise(0.05, { freq: 2200, q: 1.2, gain: 0.05, pos, at: at + 0.02 });
   }
 

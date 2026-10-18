@@ -3,6 +3,7 @@ import {
   PHYSICS,
   SEATS,
   avoidBodies,
+  flawBodyScale,
   buildColliders,
   forwardOf,
   lineOfSight,
@@ -133,13 +134,18 @@ export class Physics {
     return this.sim.t < (this.slipUntil[role] ?? 0);
   }
 
+  /** 體型（巨人 1.25、小矮人 0.62） */
+  size(role: Seat): number {
+    return flawBodyScale(this.sim.flaws.flawOf(role), this.sim.flaws.cfg);
+  }
+
   /** 別人的身體（碰撞用） */
   bodies(except: Seat): Body[] {
     const out: Body[] = [];
     for (const s of this.sim.seats) {
       if (s === except || this.sim.players[s].status !== 'ok') continue;
       const p = this.sim.pose(s);
-      if (p?.connected) out.push({ x: p.x, z: p.z, r: PHYSICS.bodyRadius });
+      if (p?.connected) out.push({ x: p.x, z: p.z, r: PHYSICS.bodyRadius * this.size(s) });
     }
     return out;
   }
@@ -158,7 +164,7 @@ export class Physics {
       if (!op?.connected) continue;
       const d0 = Math.hypot(fx - op.x, fz - op.z);
       const d1 = Math.hypot(tx - op.x, tz - op.z);
-      const contact = PHYSICS.bodyRadius * 2;
+      const contact = PHYSICS.bodyRadius * (this.size(role) + this.size(other));
       if (d1 < contact + 0.12 && d1 < d0 && speed > PHYSICS.bump.minSpeed) this.bump(role, other, tx - fx, tz - fz);
       else if (d1 < contact - PHYSICS.bodyTolerance && d1 < d0 - 1e-3) return { block: true };
     }
@@ -213,7 +219,21 @@ export class Physics {
     if (!op) return;
     const len = Math.hypot(dx, dz) || 1;
     const boxes = buildColliders(this.sim.doors);
-    const to = moveWithCollision(op.x, op.z, op.x + (dx / len) * PHYSICS.bump.push, op.z + (dz / len) * PHYSICS.bump.push, boxes);
+    // 體型差：小矮人撞巨人是自己彈回來；巨人撞人會把人推得比較遠
+    const ratio = this.size(role) / this.size(other);
+    if (ratio < 0.6) {
+      const me = this.sim.pose(role);
+      if (me) {
+        const back = moveWithCollision(me.x, me.z, me.x - (dx / len) * 0.5, me.z - (dz / len) * 0.5, boxes);
+        this.sim.teleport(role, back.x, back.z, me.yaw);
+      }
+      this.sim.noise(op.x, op.z, PHYSICS.bump.noise, `bump:${role}`);
+      this.sim.emit({ kind: 'coop', text: `你撞上${this.sim.name(other)}，像撞到一面牆，被彈了回來。`, visual: 'bump', sound: 'bump', critical: true }, role);
+      this.sim.emit({ kind: 'coop', text: `${this.sim.name(role)}撞到你的腿，被彈開了。`, sound: 'bump' }, other);
+      return;
+    }
+    const push = PHYSICS.bump.push * Math.max(0.6, Math.min(1.6, ratio));
+    const to = moveWithCollision(op.x, op.z, op.x + (dx / len) * push, op.z + (dz / len) * push, boxes);
     this.sim.teleport(other, to.x, to.z, op.yaw);
     this.sim.noise(op.x, op.z, PHYSICS.bump.noise, `bump:${role}`);
     this.sim.flaws.bumpWobble(other);

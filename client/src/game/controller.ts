@@ -6,9 +6,11 @@ import {
   SPAWNS,
   STATIONS,
   WALK_SPEED,
+  PHYSICS,
   avoidBodies,
   DEFAULT_FLAW_CONFIG,
   buildColliders,
+  flawBodyScale,
   flawRadius,
   flawZoneBlocked,
   forwardOf,
@@ -55,6 +57,11 @@ let colliderKey = '';
 let bodyFlaw: FlawId | null = null;
 let bodyCfg: FlawEffectConfig = DEFAULT_FLAW_CONFIG;
 let radius = PLAYER_RADIUS;
+/** 體型（巨人 1.25、小矮人 0.62）：眼睛高度與步伐 */
+let bodyScale = 1;
+export function eyeScale(): number {
+  return bodyScale;
+}
 /** 暴衝快遞的速度向量（m/s） */
 const vel = { x: 0, z: 0 };
 /** 上一次被冷藏室擋下的時間（提示用） */
@@ -90,6 +97,8 @@ export function setBody(flaw: FlawId | null, cfg: FlawEffectConfig): void {
   bodyFlaw = flaw;
   bodyCfg = cfg;
   radius = flawRadius(flaw, cfg, PLAYER_RADIUS);
+  bodyScale = flawBodyScale(flaw, cfg);
+  pose.y = EYE_HEIGHT * bodyScale;
   colliderKey = '';
   colliders = buildColliders(doors, blockers, flaw);
   vel.x = vel.z = 0;
@@ -151,7 +160,7 @@ export function spawnFor(role: Seat): void {
   const s = SPAWNS[role];
   pose.x = s.pos[0];
   pose.z = s.pos[2];
-  pose.y = EYE_HEIGHT;
+  pose.y = EYE_HEIGHT * bodyScale;
   body.crouch = false;
   pose.yaw = s.yaw;
   pose.pitch = 0;
@@ -199,12 +208,12 @@ export function step(dt: number, enabled: boolean): StepResult {
     const e = 1 - (1 - k) ** 3;
     pose.x = slide.fx + (slide.tx - slide.fx) * e;
     pose.z = slide.fz + (slide.tz - slide.fz) * e;
-    const low = 0.55 + (EYE_HEIGHT - 0.55) * slideEye();
+    const low = (0.55 + (EYE_HEIGHT - 0.55) * slideEye()) * bodyScale;
     pose.y += (low - pose.y) * (1 - Math.exp(-Math.min(dt, 0.1) * 14));
     if (now >= slide.until) slide.active = false;
     return none;
   }
-  const eye = body.crouch ? CROUCH_EYE : EYE_HEIGHT;
+  const eye = (body.crouch ? CROUCH_EYE : EYE_HEIGHT) * bodyScale;
   pose.y += (eye - pose.y) * (1 - Math.exp(-Math.min(dt, 0.1) * 9));
   if (!enabled || frozen) {
     vel.x = vel.z = 0;
@@ -228,7 +237,7 @@ export function step(dt: number, enabled: boolean): StepResult {
   const speed = (body.crouch ? WALK_SPEED * CROUCH_SPEED : running ? RUN_SPEED : WALK_SPEED) * speedMult;
   const dist = Math.min(dt, 0.1) * speed;
   const wall = moveWithCollision(pose.x, pose.z, pose.x + dx * dist, pose.z + dz * dist, colliders, radius);
-  const av = avoidBodies(pose.x, pose.z, wall.x, wall.z, bodies);
+  const av = avoidBodies(pose.x, pose.z, wall.x, wall.z, bodies, PHYSICS.bodyRadius * bodyScale);
   const res = av.blocked ? { ...moveWithCollision(pose.x, pose.z, av.x, av.z, colliders, radius), blocked: true } : wall;
   if (zoneGate(res.x, res.z)) return { ...none, blocked: true };
   const actual = Math.hypot(res.x - pose.x, res.z - pose.z);
@@ -237,7 +246,7 @@ export function step(dt: number, enabled: boolean): StepResult {
 
   stride += actual;
   let footstep = false;
-  const strideLen = running ? 1.35 : body.crouch ? 0.7 : 1.0;
+  const strideLen = (running ? 1.35 : body.crouch ? 0.7 : 1.0) * bodyScale;
   if (stride >= strideLen) {
     stride = 0;
     footstep = true;
@@ -293,7 +302,7 @@ function stepMomentum(dt: number, f: number, r: number): StepResult {
   vel.z = Math.cos(dir) * speed;
   if (speed < 0.01) return { moved: false, blocked: false, speed: 0, footstep: false, running: false };
   const wall = moveWithCollision(pose.x, pose.z, pose.x + vel.x * h, pose.z + vel.z * h, colliders, radius);
-  const av = avoidBodies(pose.x, pose.z, wall.x, wall.z, bodies);
+  const av = avoidBodies(pose.x, pose.z, wall.x, wall.z, bodies, PHYSICS.bodyRadius * bodyScale);
   const res = av.blocked ? { ...moveWithCollision(pose.x, pose.z, av.x, av.z, colliders, radius), blocked: true } : wall;
   if (zoneGate(res.x, res.z)) {
     vel.x = vel.z = 0;
@@ -310,7 +319,7 @@ function stepMomentum(dt: number, f: number, r: number): StepResult {
   }
   stride += actual;
   let footstep = false;
-  if (stride >= 1.35) {
+  if (stride >= 1.35 * bodyScale) {
     stride = 0;
     footstep = true;
   }

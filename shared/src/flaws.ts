@@ -148,8 +148,8 @@ export const FLAW_CARDS: Record<FlawId, FlawCard> = {
     phase: 'C',
     available: true,
     tagline: '搬得動整箱貨、拿得到最高層，卻過不了低矮的門。',
-    limitation: ['過不了低門楣的「乾貨室前門」（地上有黃黑斜線與標示），要從防火門繞後走廊進乾貨室', '身體比較寬：轉彎和走位需要多一點空間'],
-    compensation: ['冷藏架、乾貨架最上層的存貨伸手就拿（其他人要踩踏凳 1.5 秒，小矮人學徒拿不到）', '搬貨箱時走得比平常快 25%'],
+    limitation: ['過不了低門楣的「乾貨室前門」（地上有黃黑斜線與標示），要從防火門繞後走廊進乾貨室', '身體比較寬：轉彎和走位需要多一點空間', '個子比所有人高（眼睛約 2 公尺）：看得到大家的頭頂，腳步又重又響'],
+    compensation: ['冷藏架、乾貨架最上層的存貨伸手就拿（其他人要踩踏凳 1.5 秒，小矮人學徒拿不到）', '搬貨箱時走得比平常快 25%', '跑步撞到人會把人推得比較遠；小矮人撞到你會自己彈開'],
     cooperationHooks: ['隊友從低門或窄縫取得的東西，放到交接架讓你接手', '你從最上層拿下來的東西交給拿不到的隊友'],
     heroMoment: '你一個人把送來的貨箱扛進去、順手把最上層的存貨分給大家，小矮人從窄縫補上冷藏食材。',
     affectedActions: ['collider:low_door', 'player_radius', 'storage:take_high', 'move_speed:crate'],
@@ -163,8 +163,8 @@ export const FLAW_CARDS: Record<FlawId, FlawCard> = {
     phase: 'C',
     available: true,
     tagline: '鑽得進冷藏室和乾貨室之間的窄縫，卻搆不到高處。',
-    limitation: ['冷藏架、乾貨架最上層的存貨拿不到（請隊友拿，或等送貨補到下層）', '看不到湯鍋裡面：要在湯鍋前「墊腳看一下」（1 秒，之後 12 秒看得到），或請隊友試吃回報'],
-    compensation: ['可以鑽過冷藏室與乾貨室之間的低矮窄縫（其他人和怪物都過不去）', '身體比較小，在擁擠的地方好走位'],
+    limitation: ['冷藏架、乾貨架最上層的存貨拿不到（請隊友拿，或等送貨補到下層）', '看不到湯鍋裡面：要在湯鍋前「墊腳看一下」（1 秒，之後 12 秒看得到），或請隊友試吃回報', '個子很矮（眼睛約 1 公尺，和檯面差不多高）：隊友在你眼前像巨人，跑步撞到巨人會被彈回來'],
+    compensation: ['可以鑽過冷藏室與乾貨室之間的低矮窄縫（其他人和怪物都過不去）', '身體比較小，在擁擠的地方好走位、可以貼著隊友擠過去，腳步又輕又快'],
     cooperationHooks: ['隊友取下最上層的存貨交給你', '隊友試吃湯鍋後回報給你'],
     heroMoment: '你穿過窄縫，比繞路快一倍地把冷藏食材送到乾貨室那頭的隊友手上。',
     affectedActions: ['collider:crawl', 'player_radius', 'storage:take_high', 'station_view:stove', 'task:peek'],
@@ -423,9 +423,13 @@ export interface FlawEffectConfig {
     radius: number;
     /** 搬貨箱時的移動倍率 */
     crateSpeed: number;
+    /** 體型（1＝一般人）：眼睛高度、模型大小、步伐 */
+    bodyScale: number;
   };
   D08: {
     radius: number;
+    /** 體型（1＝一般人）：眼睛高度、模型大小、步伐 */
+    bodyScale: number;
     /** 墊腳看湯鍋：動作時間、之後看得到多久 */
     peekMs: number;
     peekHoldMs: number;
@@ -578,8 +582,8 @@ export const DEFAULT_FLAW_CONFIG: FlawEffectConfig = {
     chopSpeed: 1.5,
     peelSpeed: 0.5,
   },
-  D07: { radius: 0.42, crateSpeed: 1.25 },
-  D08: { radius: 0.25, peekMs: 1000, peekHoldMs: 12_000 },
+  D07: { radius: 0.42, crateSpeed: 1.25, bodyScale: 1.25 },
+  D08: { radius: 0.25, bodyScale: 0.62, peekMs: 1000, peekHoldMs: 12_000 },
   D09: { steadyMs: 8000, steadyRange: 1.8, clampMs: 4000, clampHoldMs: 20_000, taskSpeed: 0.3 },
   D10: { gloveMs: 3000, gloveHoldMs: 30_000, prepSpeed: 0.2, strokeCut: 1 },
   D11: { trayMs: 2500, pedalMs: 1200, trayCapacity: 6, cleanSpeed: 0.5, warnRange: 4, warnRepeatMs: 15_000 },
@@ -641,6 +645,13 @@ export function flawSpeedMultiplier(flaw: FlawId | null, zone: ZoneId | null, he
   if (flaw === 'D12' && (zone === 'DINING' || zone === 'KITCHEN')) return cfg.D12.openSpeed;
   // 暴衝快遞：實際速度由客戶端的慣性模型決定；這裡是伺服器允許的上限
   if (flaw === 'D13') return cfg.D13.maxMult;
+  return 1;
+}
+
+/** 體型：巨人比一般人高大、小矮人矮小（眼睛高度、模型大小、腳步聲、步伐都跟著變；伺服器與客戶端共用） */
+export function flawBodyScale(flaw: FlawId | null | undefined, cfg: FlawEffectConfig): number {
+  if (flaw === 'D07') return cfg.D07.bodyScale ?? 1.25;
+  if (flaw === 'D08') return cfg.D08.bodyScale ?? 0.62;
   return 1;
 }
 

@@ -1,7 +1,7 @@
 import { handsFull } from '../ui/kitchenText';
 import { nextTab, tabIds } from './storageTabs';
 import { actionOf, isAction } from './keymap';
-import { CARRY_MAX, INGREDIENTS, INGREDIENT_IDS, RESTAURANT_ACOUSTICS, SEATS, STATIONS, ZONES, flawSpeedMultiplier, forwardOf, planQuick, PHYSICS, type Body, type IngredientId, type KitchenPublic, type QuickMode, type QuickPlan, type Seat, type StationDef, type StationKind } from '@last-table/shared';
+import { CARRY_MAX, INGREDIENTS, INGREDIENT_IDS, RESTAURANT_ACOUSTICS, SEATS, STATIONS, ZONES, flawBodyScale, flawSpeedMultiplier, forwardOf, planQuick, PHYSICS, type Body, type IngredientId, type KitchenPublic, type QuickMode, type QuickPlan, type Seat, type StationDef, type StationKind } from '@last-table/shared';
 import { audio, type LoopSpec } from '../audio/engine';
 import { speak } from '../audio/speech';
 import { act, coop, emitMark, sendMove, sendStance } from '../net/socket';
@@ -13,6 +13,7 @@ import {
   clearKeys,
   currentTarget,
   currentZone,
+  eyeScale,
   getColliders,
   look,
   nearestStation,
@@ -686,12 +687,12 @@ export function startGameLoop(): () => void {
     for (const s2 of SEATS) {
       if (s2 === r) continue;
       const rp = remotes[s2];
-      if (rp && (k?.players[s2]?.status ?? 'ok') === 'ok') others.push({ x: rp.x, z: rp.z, r: PHYSICS.bodyRadius });
+      if (rp && (k?.players[s2]?.status ?? 'ok') === 'ok') others.push({ x: rp.x, z: rp.z, r: PHYSICS.bodyRadius * flawBodyScale(k?.coop.flaws[s2], st.flawConfig) });
     }
     setBodies(others);
     const enabled = st.locked && !st.station && !st.mate && st.overlay === 'none' && !!k;
     const res = step(dt, enabled);
-    if (res.footstep) audio.footstep(null, res.running);
+    if (res.footstep) audio.footstep(null, res.running, 0, eyeScale());
     if (res.blocked && now - lastBump > 450) {
       lastBump = now;
       audio.bump();
@@ -727,7 +728,7 @@ export function startGameLoop(): () => void {
 
     systemFor(r)?.update(pose.x, pose.z, pose.yaw, now);
 
-    smooth(dt, (_who, x, z) => audio.footstep([x, z]));
+    smooth(dt, (who, x, z) => audio.footstep([x, z], false, 0, flawBodyScale(k?.coop.flaws[who], st.flawConfig)));
     for (const who of SEATS) {
       const rp = remotes[who];
       if (rp) audio.updateVoicePos(who, rp.x, rp.z);

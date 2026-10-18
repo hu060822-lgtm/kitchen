@@ -18,7 +18,9 @@ import { Invite } from './invite';
  * 設定、按鍵、料理圖鑑與委託紀錄存在電腦裡的檔案（不是瀏覽器的 localStorage），換到哪個伺服器都帶著走。
  */
 
-const DEFAULT_ONLINE_URL = 'https://null-last-table.onrender.com';
+const DEFAULT_ONLINE_URL = 'https://kitchen-jiaa.onrender.com';
+/** 舊版的預設網址（從來沒有這個服務）：存著它的設定自動改成新的預設 */
+const OLD_DEFAULT_URLS = new Set(['https://null-last-table.onrender.com']);
 const APP_TITLE = 'NULL：最後一桌';
 
 // 資料夾：%APPDATA%\NullLastTable（存檔在 saves 裡）。測試時可以用 LAST_TABLE_DATA_DIR 指定
@@ -53,7 +55,7 @@ function settings(): AppSettings {
     /* 用預設值 */
   }
   return {
-    onlineUrl: typeof c.onlineUrl === 'string' && /^https?:\/\//.test(c.onlineUrl) ? c.onlineUrl.replace(/\/+$/, '') : DEFAULT_ONLINE_URL,
+    onlineUrl: typeof c.onlineUrl === 'string' && /^https?:\/\//.test(c.onlineUrl) && !OLD_DEFAULT_URLS.has(c.onlineUrl.replace(/\/+$/, '')) ? c.onlineUrl.replace(/\/+$/, '') : DEFAULT_ONLINE_URL,
     lan: c.lan === true,
   };
 }

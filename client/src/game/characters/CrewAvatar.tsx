@@ -2,7 +2,7 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MeshLambertMaterial, type Group, type Sprite } from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { STATIONS, SEAT_INFO, forwardOf, type StationDef, type Seat } from '@last-table/shared';
+import { STATIONS, SEAT_INFO, flawBodyScale, forwardOf, type StationDef, type Seat } from '@last-table/shared';
 import { useStore } from '../../state/store';
 import { remotes, type RemotePose } from '../remote';
 import { contactShadow, nameTexture, rolePlate } from '../textures';
@@ -45,13 +45,13 @@ function useName(role: Seat): { name: string; online: boolean } {
   return { name: p?.name ?? SEAT_INFO[role].name, online: p?.connected ?? false };
 }
 
-function NameTag({ role, crouchRef }: { role: Seat; crouchRef: { current: boolean } }): JSX.Element {
+function NameTag({ role, crouchRef, size = 1 }: { role: Seat; crouchRef: { current: boolean }; size?: number }): JSX.Element {
   const { name } = useName(role);
   const tag = useMemo(() => nameTexture(`${SEAT_INFO[role].letter}　${name}`), [role, name]);
   const ref = useRef<Sprite>(null);
   useFrame((_, dt) => {
     if (!ref.current) return;
-    const goal = crouchRef.current ? 1.62 : 2.1;
+    const goal = (crouchRef.current ? 1.62 : 2.1) * size;
     ref.current.position.y += (goal - ref.current.position.y) * (1 - Math.exp(-dt * 8));
   });
   return (
@@ -65,6 +65,8 @@ function SkinnedAvatar({ role, asset }: { role: Seat; asset: CrewAsset }): JSX.E
   const group = useRef<Group>(null);
   const crouchRef = useRef(false);
   const { online } = useName(role);
+  // 體型：巨人比較高大、小矮人比較矮小（模型等比例縮放；走路動畫依腿長放慢或加快）
+  const size = useStore((s) => flawBodyScale(s.kitchen?.coop.flaws[role], s.flawConfig));
   // 每個實例各自複製骨架（材質共用，不會互相影響）
   const model = useMemo(() => cloneSkinned(asset.template), [asset]);
   const anim = useMemo(() => new CharacterAnimator(model, asset.clips), [model, asset]);
@@ -83,7 +85,7 @@ function SkinnedAvatar({ role, asset }: { role: Seat; asset: CrewAsset }): JSX.E
     g.rotation.y = r.yaw;
     crouchRef.current = r.crouch;
     anim.update(Math.min(dt, 0.1), {
-      speed: r.speed,
+      speed: r.speed / size,
       turnRate: r.turnRate,
       crouch: r.crouch,
       act: r.act,
@@ -94,15 +96,15 @@ function SkinnedAvatar({ role, asset }: { role: Seat; asset: CrewAsset }): JSX.E
 
   return (
     <group ref={group} visible={false}>
-      <mesh position={[0, 0.006, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh position={[0, 0.006, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={size}>
         <planeGeometry args={[0.9, 0.9]} />
         <meshBasicMaterial map={contactShadow()} transparent depthWrite={false} opacity={0.8} />
       </mesh>
       {/* 模型正面是 +Z；遊戲的朝向 yaw=0 是面向 -Z，所以轉半圈 */}
-      <group rotation={[0, Math.PI + asset.yaw, 0]} scale={asset.scale}>
+      <group rotation={[0, Math.PI + asset.yaw, 0]} scale={asset.scale * size}>
         <primitive object={model} />
       </group>
-      <NameTag role={role} crouchRef={crouchRef} />
+      <NameTag role={role} crouchRef={crouchRef} size={size} />
     </group>
   );
 }
@@ -121,6 +123,7 @@ function FallbackAvatar({ role }: { role: Seat }): JSX.Element {
   const crouchRef = useRef(false);
   const { online } = useName(role);
   const plate = useMemo(() => rolePlate(SEAT_INFO[role].letter), [role]);
+  const size = useStore((s) => flawBodyScale(s.kitchen?.coop.flaws[role], s.flawConfig));
   useFrame(({ clock }) => {
     const r = remotes[role];
     const g = group.current;
@@ -139,7 +142,7 @@ function FallbackAvatar({ role }: { role: Seat }): JSX.Element {
     }
   });
   return (
-    <group ref={group} visible={false}>
+    <group ref={group} visible={false} scale={size}>
       <group ref={body}>
         <mesh position={[0, 0.45, 0]} material={FB.body}>
           <boxGeometry args={[0.32, 0.9, 0.22]} />

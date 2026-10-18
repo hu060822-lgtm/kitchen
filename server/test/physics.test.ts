@@ -203,3 +203,33 @@ describe('物理（真的 Socket）', () => {
     }
   });
 });
+
+describe('體型（巨人、小矮人）', () => {
+  it('巨人撞小矮人：推得比一般人遠；小矮人撞巨人：自己被彈回來，巨人不動', () => {
+    const b = bench({ seats: ['P1', 'P2'], flaws: { P1: 'D07', P2: 'D08' } });
+    b.open();
+    place(b, 'P2', 0, 12);
+    b.sim.physics.onMove('P1', 0, 13, 0, 12.6, 4.4);
+    expect(12 - b.poses.P2.z).toBeGreaterThan(PHYSICS.bump.push * 1.2);
+
+    const c = bench({ seats: ['P1', 'P2'], flaws: { P1: 'D08', P2: 'D07' } });
+    c.open();
+    place(c, 'P2', 0, 12);
+    place(c, 'P1', 0, 12.7);
+    c.sim.physics.onMove('P1', 0, 13, 0, 12.6, 4.4);
+    expect(c.poses.P2.z).toBe(12);
+    expect(c.poses.P1.z).toBeGreaterThan(12.7);
+  });
+
+  it('身體的大小：巨人比較寬，小矮人可以靠得比較近', () => {
+    const b = bench({ seats: ['P1', 'P2'], flaws: { P1: 'D08', P2: 'D08' } });
+    b.open();
+    place(b, 'P2', 0, 12);
+    // 兩個小矮人：0.25 公尺還不算擠進去（一般人會被擋）
+    expect(b.sim.physics.onMove('P1', 0, 12.8, 0, 12.25, 2).block).toBeUndefined();
+    const g = bench({ seats: ['P1', 'P2'], flaws: { P1: 'D07', P2: 'D07' } });
+    g.open();
+    place(g, 'P2', 0, 12);
+    expect(g.sim.physics.onMove('P1', 0, 13, 0, 12.4, 2).block).toBe(true);
+  });
+});
