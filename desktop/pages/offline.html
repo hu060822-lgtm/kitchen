@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'">
+<title>NULL：最後一桌</title>
+<link rel="stylesheet" href="offline.css">
+</head>
+<body>
+<main class="ticket">
+  <h1>連不上</h1>
+  <p class="url" id="url"></p>
+  <p class="why" id="why"></p>
+  <ul>
+    <li>朋友的房間：確認房主還開著遊戲、按了「邀請朋友」。房主重新開店後網址會換，用房間代碼重新加入就好。</li>
+    <li>線上伺服器：免費方案閒置後要等約 30 秒才會醒來，按「再試一次」。</li>
+    <li>區網：兩台電腦要連同一個網路，房主的 Windows 防火牆要允許「最後一桌」。</li>
+  </ul>
+  <div class="row">
+    <button class="primary" id="retry">再試一次</button>
+    <button id="back">回到起始頁面</button>
+  </div>
+</main>
+<script src="offline.js"></script>
+</body>
+</html>

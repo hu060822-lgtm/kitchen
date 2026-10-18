@@ -1,0 +1,68 @@
+{
+  "name": "null-last-table-desktop",
+  "productName": "NULL 最後一桌",
+  "version": "0.6.0",
+  "private": true,
+  "description": "《NULL：最後一桌》Windows 應用程式：線上模式、自己開房（可存檔）、加入別人的房間",
+  "author": "NULL: Last Table",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "bundle": "node build/bundle.mjs",
+    "start": "node build/bundle.mjs && electron .",
+    "dist:win": "node build/bundle.mjs --client && electron-builder --win zip --x64",
+    "dist:linux": "node build/bundle.mjs --client && electron-builder --linux dir --x64"
+  },
+  "devDependencies": {
+    "electron": "44.5.1",
+    "electron-builder": "26.16.1",
+    "resedit": "^2.0.3"
+  },
+  "build": {
+    "appId": "com.nulllasttable.app",
+    "productName": "NULL 最後一桌",
+    "executableName": "NullLastTable",
+    "artifactName": "NullLastTable-${version}-win-x64.${ext}",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**",
+      "pages/**",
+      "build/icon.png",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "app-client",
+        "to": "client"
+      }
+    ],
+    "asar": true,
+    "compression": "normal",
+    "electronLanguages": [
+      "zh-TW",
+      "en-US"
+    ],
+    "afterPack": "build/after-pack.cjs",
+    "win": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signAndEditExecutable": false,
+      "icon": "build/icon.ico"
+    },
+    "linux": {
+      "target": [
+        "dir"
+      ],
+      "icon": "build/icon.png",
+      "category": "Game"
+    }
+  }
+}

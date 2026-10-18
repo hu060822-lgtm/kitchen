@@ -1,0 +1,84 @@
+{
+  "generator": "tools/characters/build_creatures.py",
+  "monster": {
+    "model": "monster.glb",
+    "clips": {
+      "Idle": {
+        "frames": 90,
+        "loop": true
+      },
+      "Walk": {
+        "frames": 48,
+        "loop": true
+      },
+      "Investigate": {
+        "frames": 64,
+        "loop": true
+      },
+      "Chase": {
+        "frames": 18,
+        "loop": true
+      },
+      "Windup": {
+        "frames": 27,
+        "loop": false
+      },
+      "Grab": {
+        "frames": 16,
+        "loop": false
+      },
+      "Search": {
+        "frames": 80,
+        "loop": true
+      }
+    }
+  },
+  "guest": {
+    "model": "guest_suit.glb"
+  },
+  "diners": [
+    "diner_a.glb",
+    "diner_b.glb",
+    "diner_c.glb",
+    "diner_d.glb"
+  ],
+  "civAnims": "civ_anims.glb",
+  "civClips": {
+    "SitWait": {
+      "frames": 150,
+      "loop": true
+    },
+    "SitEat": {
+      "frames": 60,
+      "loop": true
+    },
+    "SitStill": {
+      "frames": 200,
+      "loop": true
+    },
+    "StandStiff": {
+      "frames": 200,
+      "loop": true
+    }
+  },
+  "stats": {
+    "monster": {
+      "triangles": 2116
+    },
+    "diner_a": {
+      "triangles": 800
+    },
+    "diner_b": {
+      "triangles": 728
+    },
+    "diner_c": {
+      "triangles": 688
+    },
+    "diner_d": {
+      "triangles": 748
+    },
+    "guest_suit": {
+      "triangles": 800
+    }
+  }
+}

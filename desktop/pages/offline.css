@@ -1,0 +1,12 @@
+:root { --bone: #e8e5dc; --ink: #242729; --ink-3: #6e7174; --paper: #efefe9; --desk: #1f2224; color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--desk); font-family: 'Noto Sans TC', 'Microsoft JhengHei', system-ui, sans-serif; color: var(--ink); padding: 24px 16px; }
+.ticket { width: min(560px, 100%); background: var(--paper); padding: 28px 30px 30px; box-shadow: 0 24px 60px -30px #000; }
+h1 { margin: 0 0 6px; font-size: 26px; }
+.url { font-family: 'IBM Plex Mono', Consolas, monospace; font-size: 14px; word-break: break-all; margin: 0; }
+.why { color: var(--ink-3); font-size: 13px; margin: 4px 0 14px; }
+ul { padding-left: 1.2em; font-size: 14px; line-height: 1.7; }
+.row { display: flex; gap: 10px; margin-top: 18px; }
+button { font: inherit; padding: 9px 18px; border: 1px solid var(--ink); background: transparent; color: var(--ink); cursor: pointer; }
+button.primary { background: var(--ink); color: var(--bone); }
+button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }

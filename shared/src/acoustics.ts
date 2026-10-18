@@ -1,0 +1,527 @@
+import { OPENINGS, WALL_HEIGHT, ZONES, forwardOf, type Box, type Rect } from './level';
+
+/**
+ * 盲區員的空間感知：聲學資料格式與純函式計算（伺服器、客戶端、測試共用）。
+ *
+ * 這個檔案只描述「聲音世界的規則」，不碰 Web Audio：
+ *   - 方向基準：設施方位（headingOf）與每個房間的參考音（通風口）
+ *   - 主動回聲：射線、材質、延遲與殘響的計算（castEcho → planEcho）
+ *   - 聲學地標：位置、聲音種類、播放條件與遮蔽規則
+ *   - 回聲風險區：感測器的週期（伺服器權威判定）
+ *
+ * 關卡設計者只需要編輯 AcousticLevel 資料（見 RESTAURANT_ACOUSTICS 與 BLIND_LAB），
+ * 不必修改角色控制器或音訊元件。格式說明見 docs/BLIND_NAVIGATION.md。
+ */
+
+/* ------------------------------------------------------------------ */
+/* 方向基準                                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 餐廳方位（與移動、鏡頭、聽者朝向同一個座標系）：
+ *   0°＝面向後場（+z，冷藏室與後走廊）、90°＝面向右側牆（-x）、180°＝面向前場（-z，出餐口與餐廳）、270°＝面向左側牆（+x）。
+ * 「右側／左側」以面向後場時的左右命名，所以不會隨玩家轉身而改變。
+ */
+export function bearingOf(yaw: number): number {
+  const [fx, fz] = forwardOf(yaw);
+  const deg = (Math.atan2(-fx, fz) * 180) / Math.PI;
+  return ((deg % 360) + 360) % 360;
+}
+
+export const HEADING_LABELS = ['後場', '後場偏右側', '右側牆', '前場偏右側', '前場', '前場偏左側', '左側牆', '後場偏左側'] as const;
+
+/** 朝向所在的八分位（0＝後場，順時針） */
+export const octantOf = (yaw: number): number => Math.round(bearingOf(yaw) / 45) % 8;
+
+export function headingOf(yaw: number): { bearing: number; octant: number; label: string; spoken: string } {
+  const bearing = bearingOf(yaw);
+  const octant = Math.round(bearing / 45) % 8;
+  const label = HEADING_LABELS[octant];
+  return { bearing, octant, label, spoken: `面向${label}` };
+}
+
+/**
+ * 聲源相對於聽者的方位角（度）：0＝正前方、+90＝右邊、±180＝正後方。
+ * 與 Web Audio 的 PannerNode 計算方式一致（聽者 forward＝forwardOf(yaw)、up＝+y、right＝forward×up）。
+ */
+export function relativeAzimuth(lx: number, lz: number, yaw: number, sx: number, sz: number): number {
+  const [fx, fz] = forwardOf(yaw);
+  const rx = -fz;
+  const rz = fx;
+  const vx = sx - lx;
+  const vz = sz - lz;
+  const front = vx * fx + vz * fz;
+  const right = vx * rx + vz * rz;
+  return (Math.atan2(right, front) * 180) / Math.PI;
+}
+
+/* ------------------------------------------------------------------ */
+/* 材質                                                                */
+/* ------------------------------------------------------------------ */
+
+export type AcousticMaterial = 'concrete' | 'metal' | 'machine' | 'wood';
+
+export interface MaterialVoice {
+  label: string;
+  /** 音色：noise＝寬頻的「嚓」、ring＝金屬的「叮」（兩個不和諧泛音）、buzz＝設備的「嗡」、knock＝木頭的「咚」 */
+  voice: 'noise' | 'ring' | 'buzz' | 'knock';
+  /** 主要頻率（Hz） */
+  freq: number;
+  /** 回聲本身的長度（秒） */
+  ring: number;
+  /** 相對音量 */
+  gain: number;
+}
+
+export const MATERIALS: Record<AcousticMaterial, MaterialVoice> = {
+  concrete: { label: '混凝土牆', voice: 'noise', freq: 1700, ring: 0.05, gain: 1 },
+  metal: { label: '金屬門', voice: 'ring', freq: 2350, ring: 0.17, gain: 0.8 },
+  machine: { label: '設備外殼', voice: 'buzz', freq: 620, ring: 0.08, gain: 0.85 },
+  wood: { label: '木桌／文件櫃', voice: 'knock', freq: 470, ring: 0.06, gain: 0.95 },
+};
+
+/* ------------------------------------------------------------------ */
+/* 主動回聲                                                            */
+/* ------------------------------------------------------------------ */
+
+export interface EchoConfig {
+  /** 射線數（平均分布在 360°，第 0 道朝正前方） */
+  rays: number;
+  /** 最大偵測距離（公尺） */
+  range: number;
+  /** 冷卻時間（毫秒）：從按下到可以再按 */
+  cooldownMs: number;
+  /** 回聲視野：擴散波的速度（m/s）、全部照亮後維持的時間、淡出的時間（毫秒） */
+  waveSpeed: number;
+  holdMs: number;
+  fadeMs: number;
+  /** 發出脈衝到最近回聲的基本延遲（秒） */
+  baseDelay: number;
+  /** 每公尺增加的延遲（秒）。真實聲速下差異只有幾毫秒，這裡放大到人耳分辨得出的程度 */
+  delayPerMeter: number;
+  /** 距離造成的衰減：gain = 1 / (1 + d × falloff) */
+  falloff: number;
+  /** 最近距離的低通截止頻率（Hz）；越遠越悶：cutoff / (1 + d × darken) */
+  brightHz: number;
+  darken: number;
+  /** 殘響長度＝reverbBase + 平均自由路徑 × reverbPerMeter（秒） */
+  reverbBase: number;
+  reverbPerMeter: number;
+}
+
+export const ECHO_CONFIG: EchoConfig = {
+  rays: 16,
+  range: 10,
+  cooldownMs: 5000,
+  waveSpeed: 18,
+  holdMs: 1800,
+  fadeMs: 1200,
+  baseDelay: 0.06,
+  delayPerMeter: 0.034,
+  falloff: 0.42,
+  brightHz: 9000,
+  darken: 0.55,
+  reverbBase: 0.18,
+  reverbPerMeter: 0.13,
+};
+
+export interface EchoHit {
+  index: number;
+  /** 相對於玩家正前方的角度（弧度；正值＝往右） */
+  rel: number;
+  /** 反射距離；沒有反射時等於 range */
+  dist: number;
+  hit: boolean;
+  /** 反射點（世界座標）；沒有反射時是最大距離處 */
+  x: number;
+  z: number;
+  material: AcousticMaterial | null;
+  boxId: string | null;
+}
+
+/** 射線與軸對齊方塊的交點距離（slab 法）；不相交回傳 null */
+export function rayBox(ox: number, oz: number, ux: number, uz: number, b: Rect, maxDist: number): number | null {
+  let t0 = 0;
+  let t1 = maxDist;
+  if (Math.abs(ux) < 1e-9) {
+    if (ox < b.minX || ox > b.maxX) return null;
+  } else {
+    let a = (b.minX - ox) / ux;
+    let c = (b.maxX - ox) / ux;
+    if (a > c) [a, c] = [c, a];
+    t0 = Math.max(t0, a);
+    t1 = Math.min(t1, c);
+    if (t0 > t1) return null;
+  }
+  if (Math.abs(uz) < 1e-9) {
+    if (oz < b.minZ || oz > b.maxZ) return null;
+  } else {
+    let a = (b.minZ - oz) / uz;
+    let c = (b.maxZ - oz) / uz;
+    if (a > c) [a, c] = [c, a];
+    t0 = Math.max(t0, a);
+    t1 = Math.min(t1, c);
+    if (t0 > t1) return null;
+  }
+  return t0;
+}
+
+/** 只留下脈衝範圍內的碰撞盒（每次脈衝只測試附近的十幾個方塊，而不是整個關卡） */
+export function boxesNear(x: number, z: number, range: number, boxes: readonly Box[]): Box[] {
+  return boxes.filter((b) => b.maxX >= x - range && b.minX <= x + range && b.maxZ >= z - range && b.minZ <= z + range);
+}
+
+/**
+ * 發出一次回聲脈衝：從玩家位置往四周射出 cfg.rays 道射線，回傳每道射線的第一個反射。
+ * 射線遇到第一個實體就停止（不穿牆）；開著的門沒有碰撞盒，所以射線會穿過門洞繼續前進。
+ */
+export function castEcho(
+  ox: number,
+  oz: number,
+  yaw: number,
+  boxes: readonly Box[],
+  materialOf: (b: Box) => AcousticMaterial,
+  cfg: Pick<EchoConfig, 'rays' | 'range'> = ECHO_CONFIG,
+): EchoHit[] {
+  const near = boxesNear(ox, oz, cfg.range, boxes);
+  const out: EchoHit[] = [];
+  for (let i = 0; i < cfg.rays; i++) {
+    let rel = (i / cfg.rays) * Math.PI * 2;
+    if (rel > Math.PI) rel -= Math.PI * 2;
+    // 往右轉＝yaw 減少
+    const [ux, uz] = forwardOf(yaw - rel);
+    let best = cfg.range;
+    let box: Box | null = null;
+    for (const b of near) {
+      const t = rayBox(ox, oz, ux, uz, b, best);
+      if (t !== null && t < best) {
+        best = t;
+        box = b;
+      }
+    }
+    out.push({
+      index: i,
+      rel,
+      dist: best,
+      hit: !!box,
+      x: ox + ux * best,
+      z: oz + uz * best,
+      material: box ? materialOf(box) : null,
+      boxId: box?.id ?? null,
+    });
+  }
+  return out;
+}
+
+export interface EchoSummary {
+  /** 四個扇區（各 90°）最近的反射距離；沒有反射＝range */
+  front: number;
+  right: number;
+  back: number;
+  left: number;
+  /** 平均自由路徑（沒有反射的方向以 range 計算） */
+  meanFree: number;
+  /** 沒有反射（空間延伸超過偵測距離）的射線比例 */
+  openRatio: number;
+}
+
+export function summarizeEcho(hits: readonly EchoHit[], range = ECHO_CONFIG.range): EchoSummary {
+  const s = { front: range, right: range, back: range, left: range };
+  let sum = 0;
+  let open = 0;
+  for (const h of hits) {
+    sum += h.dist;
+    if (!h.hit) open++;
+    if (!h.hit) continue;
+    const deg = (h.rel * 180) / Math.PI;
+    const sector: keyof typeof s = Math.abs(deg) <= 45 ? 'front' : Math.abs(deg) >= 135 ? 'back' : deg > 0 ? 'right' : 'left';
+    s[sector] = Math.min(s[sector], h.dist);
+  }
+  return { ...s, meanFree: hits.length ? sum / hits.length : range, openRatio: hits.length ? open / hits.length : 1 };
+}
+
+/** 一次回聲的「播放計畫」：每個反射何時、多大聲、多亮，以及殘響長度。純函式，規則一致、可測試 */
+export interface EchoVoice {
+  kind: 'return' | 'open';
+  index: number;
+  x: number;
+  z: number;
+  dist: number;
+  material: AcousticMaterial | null;
+  /** 從脈衝開始的延遲（秒） */
+  at: number;
+  gain: number;
+  /** 低通截止頻率（Hz） */
+  cutoff: number;
+}
+
+export interface EchoPlan {
+  voices: EchoVoice[];
+  /** 殘響長度（秒）：空間越開放越長 */
+  tail: number;
+  tailGain: number;
+}
+
+export function planEcho(hits: readonly EchoHit[], cfg: EchoConfig = ECHO_CONFIG): EchoPlan {
+  const voices: EchoVoice[] = [];
+  for (const h of hits) {
+    const at = cfg.baseDelay + h.dist * cfg.delayPerMeter;
+    if (h.hit && h.material) {
+      voices.push({
+        kind: 'return',
+        index: h.index,
+        x: h.x,
+        z: h.z,
+        dist: h.dist,
+        material: h.material,
+        at,
+        gain: (MATERIALS[h.material].gain * 0.26) / (1 + h.dist * cfg.falloff),
+        cutoff: cfg.brightHz / (1 + h.dist * cfg.darken),
+      });
+    } else {
+      // 沒有反射的方向：最遠處一點點「空氣聲」，讓開口聽起來是「有東西延伸出去」，而不只是一片沉默
+      voices.push({ kind: 'open', index: h.index, x: h.x, z: h.z, dist: h.dist, material: null, at, gain: 0.025, cutoff: 900 });
+    }
+  }
+  const s = summarizeEcho(hits, cfg.range);
+  return { voices, tail: cfg.reverbBase + s.meanFree * cfg.reverbPerMeter, tailGain: 0.035 + s.openRatio * 0.03 };
+}
+
+/* ------------------------------------------------------------------ */
+/* 回聲視野（盲區員按 F 後短暫看到的結構模型）                              */
+/* ------------------------------------------------------------------ */
+
+/** 回聲視野從開始到完全消失的時間（毫秒） */
+export const visionDurationMs = (cfg: Pick<EchoConfig, 'range' | 'waveSpeed' | 'holdMs' | 'fadeMs'> = ECHO_CONFIG): number =>
+  (cfg.range / cfg.waveSpeed) * 1000 + cfg.holdMs + cfg.fadeMs;
+
+/** 門板的高度（門上方的牆是門楣） */
+export const DOOR_HEIGHT = 2.6;
+
+/**
+ * 回聲視野裡的一個立體：只有種類與尺寸，**沒有識別碼、顏色、文字或任何謎題資料**。
+ * wall＝牆與門楣、door＝關著的門、prop＝設備外形、frame＝門洞的輪廓（只畫線、不遮擋）、body＝隊友。
+ */
+export interface VisionSolid {
+  kind: 'wall' | 'door' | 'prop' | 'frame' | 'body';
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  minZ: number;
+  maxZ: number;
+}
+
+const distToRect = (x: number, z: number, b: Rect): number =>
+  Math.hypot(Math.max(b.minX - x, 0, x - b.maxX), Math.max(b.minZ - z, 0, z - b.maxZ));
+
+/**
+ * 回聲視野要畫的結構：脈衝範圍內的碰撞盒（牆、關著的門、設備外形），加上關卡提供的額外結構（門楣、門洞輪廓）
+ * 與當下位置的隊友。只用公開的幾何資料，不含任何謎題線索；超出範圍的東西不會出現。
+ */
+export function visionSolids(
+  boxes: readonly Box[],
+  ox: number,
+  oz: number,
+  range: number,
+  level: Pick<AcousticLevel, 'vision' | 'propHeight'>,
+  bodies: ReadonlyArray<readonly [number, number]> = [],
+): VisionSolid[] {
+  const out: VisionSolid[] = [];
+  const reach = range + 0.5;
+  for (const b of boxes) {
+    if (distToRect(ox, oz, b) > reach) continue;
+    const r = { minX: b.minX, maxX: b.maxX, minZ: b.minZ, maxZ: b.maxZ };
+    if (b.kind === 'door') out.push({ kind: 'door', ...r, minY: 0, maxY: b.height ?? DOOR_HEIGHT });
+    else if (b.kind === 'prop') out.push({ kind: 'prop', ...r, minY: 0, maxY: b.height ?? level.propHeight?.(b) ?? 1.2 });
+    else if (b.kind === 'entity') out.push({ kind: 'body', ...r, minY: 0, maxY: b.height ?? 1.8 });
+    else out.push({ kind: 'wall', ...r, minY: 0, maxY: b.height ?? WALL_HEIGHT });
+  }
+  for (const s of level.vision ?? []) if (distToRect(ox, oz, s) <= reach) out.push({ ...s });
+  for (const [x, z] of bodies) {
+    if (Math.hypot(x - ox, z - oz) > reach) continue;
+    out.push({ kind: 'body', minX: x - 0.25, maxX: x + 0.25, minZ: z - 0.25, maxZ: z + 0.25, minY: 0, maxY: 1.75 });
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* 聲學關卡資料                                                         */
+/* ------------------------------------------------------------------ */
+
+export interface AcousticZone {
+  id: string;
+  label: string;
+  rect: Rect;
+}
+
+/** 兩個區域之間的開口；door 沒有指定＝永遠暢通（例如沒有門的通道） */
+export interface AcousticOpening {
+  id: string;
+  a: string;
+  b: string;
+  /** 開口中心 [x, z] */
+  at: [number, number];
+  door?: string;
+}
+
+/** 方向參考音：每個區域一個固定位置的低音量聲源（只在同一個區域內聽得到） */
+export interface ReferenceSource {
+  zone: string;
+  pos: [number, number];
+  /** 高度（公尺） */
+  y: number;
+}
+
+export type LandmarkSound = 'vent' | 'buzz' | 'drip' | 'pipe' | 'alarm' | 'hum';
+
+export interface LandmarkDef {
+  /** 穩定的識別碼：謎題或文件可以用它指稱這個地標 */
+  id: string;
+  /** 給關卡設計者與文件看的名稱（不會在遊戲中顯示或播報） */
+  label: string;
+  zone: string;
+  pos: [number, number];
+  y: number;
+  sound: LandmarkSound;
+  /** 週期性聲音的間隔（毫秒）；持續音可省略 */
+  periodMs?: number;
+  /** 音量倍率（1＝預設） */
+  gain?: number;
+  /** 播放條件：指定的門開著才播放（例如門後的機房） */
+  whenDoorOpen?: string;
+  /**
+   * 遮蔽規則：預設只有同一個區域聽得到。列在這裡的相鄰區域，在連接的開口暢通時可以聽到
+   * 「從開口傳過來」的悶聲（低通、較小聲，方位在開口上）。牆壁永遠完全遮蔽。
+   */
+  audibleFrom?: string[];
+}
+
+export interface RiskZoneDef {
+  id: string;
+  /** 給文件與看得見的人看的名稱 */
+  label: string;
+  zone: string;
+  /** 感測器位置 [x, z] */
+  pos: [number, number];
+  /** 偵測半徑（公尺）：在這個範圍內、警戒中發出回聲才會被偵測 */
+  radius: number;
+  /** 休息、預警、警戒的時間（毫秒）；預警屬於休息時間的最後一段 */
+  idleMs: number;
+  warnMs: number;
+  armedMs: number;
+  /** 被偵測後回聲受到干擾的時間（毫秒） */
+  jamMs: number;
+}
+
+export interface AcousticLevel {
+  id: string;
+  zones: AcousticZone[];
+  openings: AcousticOpening[];
+  reference: ReferenceSource[];
+  landmarks: LandmarkDef[];
+  risks: RiskZoneDef[];
+  /** 從開口傳過來的悶聲：音量倍率與低通頻率 */
+  muffle: { gain: number; cutoff: number };
+  materialOf: (b: Box) => AcousticMaterial;
+  /** 回聲視野：碰撞盒以外的結構（門楣、門洞輪廓） */
+  vision?: VisionSolid[];
+  /** 回聲視野：設備外形的高度（預設 1.2 m） */
+  propHeight?: (b: Box) => number;
+}
+
+export function zoneOfPoint(level: AcousticLevel, x: number, z: number): string | null {
+  for (const zn of level.zones) {
+    const r = zn.rect;
+    if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) return zn.id;
+  }
+  return null;
+}
+
+export type Audibility = { mode: 'direct'; pos: [number, number] } | { mode: 'muffled'; pos: [number, number] } | { mode: 'none' };
+
+/**
+ * 遮蔽規則：同一個區域＝直接聽到；列在 audibleFrom 的相鄰區域＝開口暢通時從開口聽到悶聲；其餘＝聽不到。
+ * isOpen(doorId) 由呼叫端提供目前門的狀態（伺服器同步的 world.doors）。
+ */
+export function audibility(
+  level: AcousticLevel,
+  src: { zone: string; pos: [number, number]; audibleFrom?: string[] },
+  listenerZone: string | null,
+  isOpen: (door: string) => boolean,
+): Audibility {
+  if (!listenerZone) return { mode: 'none' };
+  if (listenerZone === src.zone) return { mode: 'direct', pos: src.pos };
+  if (!src.audibleFrom?.includes(listenerZone)) return { mode: 'none' };
+  const gap = level.openings.find(
+    (o) => ((o.a === src.zone && o.b === listenerZone) || (o.b === src.zone && o.a === listenerZone)) && (!o.door || isOpen(o.door)),
+  );
+  return gap ? { mode: 'muffled', pos: gap.at } : { mode: 'none' };
+}
+
+/* ------------------------------------------------------------------ */
+/* 回聲風險區（伺服器權威）                                              */
+/* ------------------------------------------------------------------ */
+
+export type RiskState = 'idle' | 'warning' | 'armed';
+
+/** 從計時起點經過 tMs 後，感測器的狀態與距離下一次改變的毫秒數。週期：休息（最後 warnMs 為預警）→ 警戒 */
+export function riskPhase(def: RiskZoneDef, tMs: number): { state: RiskState; msLeft: number } {
+  const cycle = def.idleMs + def.armedMs;
+  const p = ((tMs % cycle) + cycle) % cycle;
+  if (p < def.idleMs - def.warnMs) return { state: 'idle', msLeft: def.idleMs - def.warnMs - p };
+  if (p < def.idleMs) return { state: 'warning', msLeft: def.idleMs - p };
+  return { state: 'armed', msLeft: cycle - p };
+}
+
+export interface RiskStatus {
+  id: string;
+  state: RiskState;
+  /** 這個狀態還剩多久（毫秒） */
+  msLeft: number;
+}
+
+/* ------------------------------------------------------------------ */
+/* 餐廳的聲學資料                                                       */
+/* ------------------------------------------------------------------ */
+
+/** 材質：牆＝混凝土；門＝金屬；家具與設備＝設備外殼；餐桌＝木頭；客人與怪物＝悶響（以木頭近似） */
+export function restaurantMaterial(b: Box): AcousticMaterial {
+  if (b.kind === 'door') return 'metal';
+  if (b.kind === 'entity') return 'wood';
+  if (b.kind === 'prop') return b.id.startsWith('table_') ? 'wood' : 'machine';
+  return 'concrete';
+}
+
+export const RESTAURANT_ACOUSTICS: AcousticLevel = {
+  id: 'restaurant',
+  zones: ZONES.map((z) => ({ id: z.id, label: z.label, rect: { minX: z.minX, maxX: z.maxX, minZ: z.minZ, maxZ: z.maxZ } })),
+  openings: OPENINGS.map((o) => ({ id: o.id, a: o.a, b: o.b, at: o.at, door: o.door })),
+  // 參考音（通風口）：每個區域都在右側牆（-x）高處、離區域前緣 2 m；
+  // 後走廊的右側牆就是冷藏室後門，所以改在走廊中段的北牆
+  reference: ZONES.map((z) => ({ zone: z.id, pos: (z.id === 'HALL_N' ? [1.5, 26.75] : [z.minX + 0.25, z.minZ + 2]) as [number, number], y: 2.8 })),
+  landmarks: [
+    { id: 'hood', label: '廚房：抽油煙機的低鳴', zone: 'KITCHEN', pos: [-2, 18.6], y: 2.6, sound: 'vent', gain: 0.8 },
+    { id: 'compressor', label: '冷藏室：壓縮機的低頻震動', zone: 'COLD', pos: [-5, 26.8], y: 2.4, sound: 'hum', audibleFrom: ['KITCHEN', 'HALL_N'] },
+    { id: 'drip', label: '後走廊：漏水', zone: 'HALL_N', pos: [2, 26.6], y: 0.2, sound: 'drip', periodMs: 1700 },
+    { id: 'ballast', label: '乾貨室：故障的日光燈安定器', zone: 'DRY', pos: [-1.5, 20.2], y: 3.0, sound: 'buzz', periodMs: 4200 },
+    { id: 'clock', label: '餐廳：掛鐘的固定節奏', zone: 'DINING', pos: [8.6, 4.5], y: 2.4, sound: 'alarm', periodMs: 6000, gain: 0.5 },
+  ],
+  risks: [],
+  muffle: { gain: 0.28, cutoff: 650 },
+  materialOf: restaurantMaterial,
+  vision: restaurantVision(),
+};
+
+/** 門洞上方的門楣與出餐窗口上方的牆（碰撞盒以外、但看得到的結構） */
+function restaurantVision(): VisionSolid[] {
+  const out: VisionSolid[] = [];
+  for (const o of OPENINGS) {
+    const half = o.width / 2;
+    const [x, z] = o.at;
+    const r = o.along === 'x' ? { minX: x - half, maxX: x + half, minZ: z - 0.15, maxZ: z + 0.15 } : { minX: x - 0.15, maxX: x + 0.15, minZ: z - half, maxZ: z + half };
+    out.push({ kind: 'wall', ...r, minY: DOOR_HEIGHT, maxY: WALL_HEIGHT });
+  }
+  out.push({ kind: 'wall', minX: -3, maxX: 1, minZ: 9, maxZ: 9.3, minY: 2.1, maxY: WALL_HEIGHT });
+  return out;
+}

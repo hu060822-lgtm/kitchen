@@ -1,0 +1,17 @@
+node_modules/
+dist/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+coverage/
+.vite/
+e2e-shots/
+__pycache__/
+
+# Windows 應用程式（desktop/）的建置產物
+desktop/node_modules/
+desktop/dist/
+desktop/release/
+desktop/app-client/

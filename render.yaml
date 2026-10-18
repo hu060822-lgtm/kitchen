@@ -1,0 +1,36 @@
+# Render Blueprint：單一 Web Service（Node 伺服器同時提供前端靜態檔、Socket.IO 與 API）
+services:
+  - type: web
+    name: null-last-table
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      # 班次長度（秒）：開店備料、營業
+      - key: PREP_SECONDS
+        value: "180"
+      - key: SERVICE_SECONDS
+        value: "900"
+      # 恐怖系統（客人、怪物）：0＝純料理模式
+      - key: THREATS
+        value: "1"
+      # 開發者工具（看怪物狀態、跳過備料、召喚威脅）：正式環境明確關閉
+      - key: DEBUG_TOOLS
+        value: "0"
+      # Render 前面有一層代理：用 X-Forwarded-For 判斷來源 IP（房間代碼查詢處的頻率限制）
+      - key: TRUST_PROXY
+        value: "1"
+      # TURN 憑證請在 Render 後台手動填入（sync: false 代表不寫進版本庫）
+      - key: TURN_URLS
+        sync: false
+      - key: TURN_USERNAME
+        sync: false
+      - key: TURN_CREDENTIAL
+        sync: false

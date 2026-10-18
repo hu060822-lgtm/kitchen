@@ -1,0 +1,36 @@
+{
+  "name": "null-last-table",
+  "private": true,
+  "version": "0.1.0",
+  "description": "《NULL：最後一桌》— 三人合作烹飪與恐怖（第一人稱，3D）",
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "server",
+    "client"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c blue,green \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w client && npm run build -w server",
+    "start": "npm run start -w server",
+    "typecheck": "npm run typecheck -w shared && npm run typecheck -w server && npm run typecheck -w client && tsc -p e2e/tsconfig.json",
+    "test": "npm run test -w server",
+    "e2e": "tsx e2e/browser-shift.ts http://localhost:3001 e2e-shots",
+    "e2e:assets": "tsx e2e/character-assets.ts http://localhost:3001",
+    "models": "python3 tools/characters/build_crew.py",
+    "e2e:blind": "tsx e2e/blind-lab.ts http://localhost:3001",
+    "models:creatures": "python3 tools/characters/build_creatures.py",
+    "e2e:bcd": "tsx e2e/flaws-bcd.ts http://localhost:3001 bcd-shots",
+    "e2e:playtest": "tsx e2e/playtest.ts http://localhost:3001 playtest-shots",
+    "e2e:food": "tsx e2e/food-shots.ts http://localhost:3001 food-shots",
+    "e2e:physics": "tsx e2e/physics.ts http://localhost:3001 physics-shots"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0",
+    "playwright": "^1.55.1",
+    "typescript": "^5.6.0"
+  }
+}
